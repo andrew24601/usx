@@ -1,0 +1,21 @@
+{
+  "name": "usx",
+  "version": "1.0.3",
+  "description": "Minimal vanilla jsx",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/andrew24601/usx.git"
+  },
+  "author": "Andrew Barry",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/andrew24601/usx/issues"
+  },
+  "homepage": "https://github.com/andrew24601/usx#readme"
+}
