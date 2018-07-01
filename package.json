@@ -1,12 +1,14 @@
 {
   "name": "usx",
-  "version": "1.0.3",
+  "version": "1.0.5",
   "description": "Minimal vanilla jsx",
-  "main": "dist/index.js",
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc"
+    "build": "node package.js",
+    "test": "nyc --reporter=html --reporter=text mocha",
+    "coverage": "nyc report --reporter=text-lcov | coveralls"
   },
   "repository": {
     "type": "git",
@@ -17,5 +19,17 @@
   "bugs": {
     "url": "https://github.com/andrew24601/usx/issues"
   },
-  "homepage": "https://github.com/andrew24601/usx#readme"
+  "homepage": "https://github.com/andrew24601/usx#readme",
+  "devDependencies": {
+    "@types/chai": "^4.1.4",
+    "@types/mocha": "^5.2.4",
+    "chai": "^4.1.2",
+    "coveralls": "^3.0.2",
+    "jsdom": "^11.11.0",
+    "jsdom-global": "^3.0.2",
+    "mocha": "^5.2.0",
+    "mocha-lcov-reporter": "^1.3.0",
+    "nyc": "^12.0.2",
+    "typescript": "^2.9.2"
+  }
 }

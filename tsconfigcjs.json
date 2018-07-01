@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "target": "es6", 
+    "module": "CommonJS",
+    "declaration": true,
+    "outDir": "./distcjs",
+    "experimentalDecorators": true
+  },
+  "files": ["lib/index.ts"]
+}

@@ -1,13 +1,16 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
 const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
 const matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
 const SVGNS = "http://www.w3.org/2000/svg";
 const ComponentRegistry = {};
-export function WebComponent(name) {
+function WebComponent(name) {
     return function (constructor) {
         constructor["__WebComponent"] = name;
         ComponentRegistry[name.toLowerCase()] = constructor;
     };
 }
+exports.WebComponent = WebComponent;
 function applyStyleProp(el, k, val) {
     if (typeof val === "number" && matchPx.test(k))
         el.style[k] = val + "px";
@@ -75,7 +78,7 @@ function append(el, c, before) {
             el.appendChild(document.createTextNode("" + c));
     }
 }
-export default function usx(tag, props, ...children) {
+function usx(tag, props, ...children) {
     if (typeof tag === 'string') {
         const el = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
         append(el, children, null);
@@ -96,6 +99,7 @@ export default function usx(tag, props, ...children) {
         return null;
     }
 }
+exports.default = usx;
 function componentFromDOM(el, construct) {
     const props = {};
     const children = [];
@@ -113,7 +117,7 @@ function componentFromDOM(el, construct) {
     }
     return new construct(props, children);
 }
-export function automount(root) {
+function automount(root) {
     if (root == null)
         root = document.body;
     for (let el = root.firstChild; el; el = el.nextSibling) {
@@ -130,3 +134,4 @@ export function automount(root) {
         }
     }
 }
+exports.automount = automount;

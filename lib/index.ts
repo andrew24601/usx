@@ -6,16 +6,26 @@ const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Le
 const matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
 const SVGNS = "http://www.w3.org/2000/svg";
 
-function applyStyleProp(el, k, val) {
-    if (typeof val === "number" && matchPx.test(k))
-    el.style[k] = val + "px";
-else
-    el.style[k] = val;
+const ComponentRegistry = {
 
 }
 
+export function WebComponent(name: string) {
+    return function(constructor: Function) {
+        constructor["__WebComponent"] = name;
+        ComponentRegistry[name.toLowerCase()] = constructor;
+    }
+}
+
+function applyStyleProp(el, k, val) {
+    if (typeof val === "number" && matchPx.test(k))
+        el.style[k] = val + "px";
+    else
+        el.style[k] = val;
+}
+
 function setAttribute(el, prop, val) {
-    if (val == null || prop == "$ctx") {
+    if (val == null) {
         return;
     }
     if (prop.length > 2 && prop.substring(0, 2) === "on") {
@@ -48,6 +58,8 @@ function append(el, c, before:Node) {
             el.appendChild(c);
     } else if (c instanceof Array) {
         c.forEach(i => append(el, i, before));
+    } else if (typeof c === "object" && "constructor" in c && c.constructor.__WebComponent != null) {
+        append(el, c._el, before);
     } else if (typeof c === "function") {
         const c1 = document.createComment("");
         const c2 = document.createComment("");
@@ -77,10 +89,48 @@ export default function usx(tag, props, ...children) {
 
         return el;
     } else if (typeof tag === 'function') {
-        const result = tag(props, ...children);
-        return result;
+        let result;
+        if (tag["__WebComponent"] != null) {
+            return new tag(props, children);
+        } else
+            return tag(props, children);
     } else {
         return null;
     }
 }
 
+function componentFromDOM(el, construct) {
+    const props = {};
+    const children = [];
+    for (var i = 0; i < el.attributes.length; i++) {
+        var attrib = el.attributes[i];
+        props[attrib.name] = attrib.value;
+    }
+    for (let child = el.firstChild; child; child = child.nextSibling) {
+        if (child.nodeType == 1 && ComponentRegistry[child.localName.toLowerCase()]) {
+            children.push(componentFromDOM(child, ComponentRegistry[child.localName.toLowerCase()]))
+        } else {
+            children.push(child);
+        }
+    }
+
+    return new construct(props, children);
+
+}
+
+export function automount(root?) {
+    if (root == null) root = document.body;
+
+    for (let el = root.firstChild; el; el = el.nextSibling) {
+        if (el.nodeType != 1) continue;
+        const lowerName = el.localName.toLowerCase();
+        if (ComponentRegistry[lowerName]) {
+            const component = componentFromDOM(el, ComponentRegistry[lowerName]);
+            append(el.parentElement, component, el);
+            el.parentElement.removeChild(el);
+
+        } else {
+            automount(el);
+        }
+    }
+}
