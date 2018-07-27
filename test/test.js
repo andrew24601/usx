@@ -293,6 +293,50 @@ describe('stream', ()=>{
     })
 })
 
+describe('$ mechanism', ()=>{
+    it('div content', ()=>{
+        const handlers = [];
+        const context = {
+            value: function(fn) {
+                const stream = new TestStream(fn());
+                handlers.push(()=>{
+                    stream.push(fn());
+                })
+                return stream;
+            }
+        }
+
+        let x = "hello";
+
+        const el = usx('div', {$:context}, ()=>x);
+        expect(el.textContent).to.equal('hello');
+        x = 'world';
+        handlers.forEach((h)=>h());
+        expect(el.textContent).to.equal('world');
+    })
+    it ('div attribute', ()=>{
+        const handlers = [];
+        const context = {
+            value: function(fn) {
+                const stream = new TestStream(fn());
+                handlers.push(()=>{
+                    stream.push(fn());
+                })
+                return stream;
+            }
+        }
+
+        let x = "hello";
+
+        const el = usx('div', {$:context, class: ()=>x});
+        expect(el.className).to.equal('hello');
+        x = 'world';
+        handlers.forEach((h)=>h());
+        expect(el.className).to.equal('world');
+
+    })
+})
+
 describe('automount', ()=>{
     it('automount single', ()=>{
         document.body.innerHTML = '<MyComponent class="automount"/>';
