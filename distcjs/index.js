@@ -90,11 +90,11 @@ function append(el, c, before) {
             el.appendChild(document.createTextNode("" + v));
         });
     }
-    else if (c != null) {
-        if (before)
-            el.insertBefore(document.createTextNode("" + c), before);
-        else
-            el.appendChild(document.createTextNode("" + c));
+    else if (before) {
+        el.insertBefore(document.createTextNode("" + c), before);
+    }
+    else {
+        el.appendChild(document.createTextNode("" + c));
     }
 }
 function usx(tag, props, ...children) {

@@ -92,11 +92,10 @@ function append(el, c, before:Node) {
         c.on('data',(v)=>{
             el.appendChild(document.createTextNode("" + v));
         })
-    } else if (c != null) {
-        if (before)
-            el.insertBefore(document.createTextNode("" + c), before);
-        else
-            el.appendChild(document.createTextNode("" + c));
+    } else if (before) {
+        el.insertBefore(document.createTextNode("" + c), before);
+    } else {
+        el.appendChild(document.createTextNode("" + c));
     }
 }
 

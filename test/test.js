@@ -163,7 +163,7 @@ class TestStream extends EventEmitter {
     }
 }
 
-describe('Streaming', ()=>{
+describe('Evented value', ()=>{
     it('div content', ()=>{
         const stream = new TestStream('');
         const el = usx('div', null, stream);
@@ -235,6 +235,14 @@ describe('Streaming', ()=>{
         expect(el.style.fontSize).is.equal('12px');
         stream.push(14)
         expect(el.style.fontSize).is.equal('14px');
+    })
+});
+
+describe('Unevented value', ()=>{
+    it('div content', ()=>{
+        const stream = {value() {return "hello"}};
+        const el = usx('div', null, stream);
+        expect(el.textContent).is.equal('hello');
     })
 });
 
