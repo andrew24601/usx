@@ -1,12 +1,17 @@
 {
   "compilerOptions": {
     /* Basic Options */
-    "target": "es6", 
+    "target": "es5", 
     "module": "es6",
     "declaration": true,
      "outDir": "./dist",
      "experimentalDecorators": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "lib": [
+      "dom",
+      "es2015",
+      "es2015.promise"
+    ]
   },
   "files": ["lib/index.ts"]
 }

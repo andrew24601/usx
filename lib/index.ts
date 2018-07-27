@@ -24,6 +24,28 @@ function applyStyleProp(el, k, val) {
         el.style[k] = val;
 }
 
+function applyAttribute(el, k, val) {
+    el.setAttribute(k, val);
+}
+
+function needsApply(val) {
+    return ((typeof val === 'object' && typeof val.then === 'function') ||
+     (typeof val === 'object' && typeof val.value === 'function'));
+}
+
+function applyValue(val, callback) {
+    if (typeof val === 'object' && typeof val.then === 'function') {
+        val.then((v)=>callback(v))
+    } else if (typeof val === 'object' && typeof val.value === 'function') {
+        callback(val.value());
+        if (typeof val.on === 'function') {
+            val.on("update", (v)=>callback(v));
+        }
+    } else {
+        callback(val);
+    }
+}
+
 function setAttribute(el, prop, val) {
     if (val == null) {
         return;
@@ -34,19 +56,19 @@ function setAttribute(el, prop, val) {
         if (typeof val === "object" && val != null) {
             Object.keys(val).forEach(k=>{
                 let stylePropVal = val[k];
-
-                if (typeof stylePropVal === "function") {
-                    stylePropVal((v)=>applyStyleProp(el, k, v));
-                } else {
-                    applyStyleProp(el, k, stylePropVal);
-                }
+                applyValue(stylePropVal, (v)=>applyStyleProp(el, k, v))
             });
         }
-    } else if (typeof val === "function") {
-        val((v)=>el.setAttribute(prop, v));
     } else {
-        el.setAttribute(prop, val);
+        applyValue(val, (v)=>applyAttribute(el, prop, v));
     }
+}
+
+function applyContent(el, c1, c2, v) {
+    while (c1.nextSibling != c2) {
+        el.removeChild(c1.nextSibling);
+    }
+    append(el, v, c2);
 }
 
 function append(el, c, before:Node) {
@@ -60,17 +82,16 @@ function append(el, c, before:Node) {
         c.forEach(i => append(el, i, before));
     } else if (typeof c === "object" && "constructor" in c && c.constructor.__WebComponent != null) {
         append(el, c._el, before);
-    } else if (typeof c === "function") {
+    } else if (needsApply(c)) {
         const c1 = document.createComment("");
         const c2 = document.createComment("");
         el.appendChild(c1);
         el.appendChild(c2);
-        c((v)=>{
-            while (c1.nextSibling != c2) {
-                el.removeChild(c1.nextSibling);
-            }
-            append(el, v, c2);
-        });
+        applyValue(c, (v)=>applyContent(el, c1, c2, v));
+    } else if (typeof c === 'object' && typeof c.on === 'function') {
+        c.on('data',(v)=>{
+            el.appendChild(document.createTextNode("" + v));
+        })
     } else if (c != null) {
         if (before)
             el.insertBefore(document.createTextNode("" + c), before);

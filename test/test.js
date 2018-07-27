@@ -127,26 +127,46 @@ describe('Web component test', ()=>{
     })
 });
 
-class TestStream {
-    constructor(v) {
-        this.v = v;
-        this.callbacks = [];
-        this.valueFn = (callback)=>{
-            this.callbacks.push(callback);
-            callback(this.v);
+class EventEmitter {
+    constructor() {
+        this.listeners = {};
+    }
+    on(name, callback) {
+        let listeners = this.listeners[name];
+        if (listeners == null) {
+            listeners = this.listeners[name] = [];
         }
+        listeners.push(callback);
+    }
+    emit(eventName, ...args) {
+        const listeners = this.listeners[eventName];
+        if (listeners == null) return;
+        for (const listener of listeners) {
+            listener.apply(this, args);
+        }
+    }
+}
+
+class TestStream extends EventEmitter {
+    constructor(v) {
+        super();
+        this.v = v;
+    }
+
+    value() {
+        return this.v;
     }
 
     push(v) {
         this.v = v;
-        this.callbacks.forEach(callback=>callback(v));
+        this.emit("update", v);
     }
 }
 
 describe('Streaming', ()=>{
     it('div content', ()=>{
         const stream = new TestStream('');
-        const el = usx('div', null, stream.valueFn);
+        const el = usx('div', null, stream);
         expect(el.textContent).is.equal('');
         stream.push('Hello')
         expect(el.textContent).is.equal('Hello');
@@ -155,7 +175,7 @@ describe('Streaming', ()=>{
     })
     it('div numeric content', ()=>{
         const stream = new TestStream(0);
-        const el = usx('div', null, stream.valueFn);
+        const el = usx('div', null, stream);
         expect(el.textContent).is.equal('0');
         stream.push(1)
         expect(el.textContent).is.equal('1');
@@ -164,7 +184,7 @@ describe('Streaming', ()=>{
     })
     it('div pre content', ()=>{
         const stream = new TestStream('');
-        const el = usx('div', null, 'content: ', stream.valueFn);
+        const el = usx('div', null, 'content: ', stream);
         expect(el.textContent).is.equal('content: ');
         stream.push('Hello')
         expect(el.textContent).is.equal('content: Hello');
@@ -173,7 +193,7 @@ describe('Streaming', ()=>{
     })
     it('div post content', ()=>{
         const stream = new TestStream('');
-        const el = usx('div', null, stream.valueFn, ": content");
+        const el = usx('div', null, stream, ": content");
         expect(el.textContent).is.equal(': content');
         stream.push('Hello')
         expect(el.textContent).is.equal('Hello: content');
@@ -182,7 +202,7 @@ describe('Streaming', ()=>{
     })
     it('div mid content', ()=>{
         const stream = new TestStream('');
-        const el = usx('div', null, "[", stream.valueFn, "]");
+        const el = usx('div', null, "[", stream, "]");
         expect(el.textContent).is.equal('[]');
         stream.push('Hello')
         expect(el.textContent).is.equal('[Hello]');
@@ -191,7 +211,7 @@ describe('Streaming', ()=>{
     })
     it('div attribute', ()=>{
         const stream = new TestStream('Start');
-        const el = usx('div', {class: stream.valueFn});
+        const el = usx('div', {class: stream});
         expect(el.className).is.equal('Start');
         stream.push('Hello')
         expect(el.className).is.equal('Hello');
@@ -200,7 +220,7 @@ describe('Streaming', ()=>{
     })
     it('div style', ()=>{
         const stream = new TestStream('Start');
-        const el = usx('div', {style: {fontFamily: stream.valueFn}});
+        const el = usx('div', {style: {fontFamily: stream}});
         expect(el.style.fontFamily).is.equal('Start');
         stream.push('Hello')
         expect(el.style.fontFamily).is.equal('Hello');
@@ -209,7 +229,7 @@ describe('Streaming', ()=>{
     })
     it('div style px', ()=>{
         const stream = new TestStream(10);
-        const el = usx('div', {style: {fontSize: stream.valueFn}});
+        const el = usx('div', {style: {fontSize: stream}});
         expect(el.style.fontSize).is.equal('10px');
         stream.push(12)
         expect(el.style.fontSize).is.equal('12px');
@@ -217,6 +237,53 @@ describe('Streaming', ()=>{
         expect(el.style.fontSize).is.equal('14px');
     })
 });
+
+describe('promise', ()=>{
+    it('div class', async ()=>{
+        function promiseHello10() {
+            return new Promise((resolve, reject)=>{
+                setTimeout(()=>resolve('Hello'), 10);
+            })
+        }
+        const p = promiseHello10();
+        const el = usx('div', {class: p});
+        expect(el.className).to.equal('');
+        await p;
+        expect(el.className).to.equal('Hello');
+    }),
+    it('div content', async ()=>{
+        function promiseHello10() {
+            return new Promise((resolve, reject)=>{
+                setTimeout(()=>resolve('Hello'), 10);
+            })
+        }
+        const p = promiseHello10();
+        const el = usx('div', null, p);
+        expect(el.textContent).to.equal('');
+        await p;
+        expect(el.textContent).to.equal('Hello');
+    }),
+    it('div style px', async ()=>{
+        const p = new Promise((resolve, reject)=>{
+            setTimeout(()=>resolve(12), 10);
+        });
+        const el = usx('div', {style:{fontSize: p}});
+        await p;
+        expect(el.style.fontSize).to.equal('12px');
+    })
+})
+
+describe('stream', ()=>{
+    it('div content', ()=>{
+        const content = new EventEmitter();
+        const el = usx('div', null, content);
+        expect(el.textContent).to.equal('');
+        content.emit('data', "Hello")
+        expect(el.textContent).to.equal('Hello');
+        content.emit('data', " World")
+        expect(el.textContent).to.equal('Hello World');
+    })
+})
 
 describe('automount', ()=>{
     it('automount single', ()=>{
