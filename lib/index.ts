@@ -144,14 +144,15 @@ function componentFromDOM(el, construct) {
 export function automount(root?) {
     if (root == null) root = document.body;
 
-    for (let el = root.firstChild; el; el = el.nextSibling) {
+    let nextSibling;
+    for (let el = root.firstChild; el; el = nextSibling) {
+        nextSibling = el.nextSibling;
         if (el.nodeType != 1) continue;
         const lowerName = el.localName.toLowerCase();
         if (ComponentRegistry[lowerName]) {
             const component = componentFromDOM(el, ComponentRegistry[lowerName]);
             append(null, el.parentElement, component, el);
             el.parentElement.removeChild(el);
-
         } else {
             automount(el);
         }

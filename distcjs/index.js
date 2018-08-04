@@ -142,7 +142,9 @@ function componentFromDOM(el, construct) {
 function automount(root) {
     if (root == null)
         root = document.body;
-    for (let el = root.firstChild; el; el = el.nextSibling) {
+    let nextSibling;
+    for (let el = root.firstChild; el; el = nextSibling) {
+        nextSibling = el.nextSibling;
         if (el.nodeType != 1)
             continue;
         const lowerName = el.localName.toLowerCase();
