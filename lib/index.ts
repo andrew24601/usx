@@ -1,20 +1,54 @@
-type Doer = {
-    do(callback:()=>void);
-}
-
 const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
 const matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
 const SVGNS = "http://www.w3.org/2000/svg";
 
-const ComponentRegistry = {
+let callbackMap = new Map<Element, any>();
+let debug = false;
 
+export function enableDebugging() {
+    debug = true;
 }
 
-export function WebComponent(name: string) {
-    return function(constructor: Function) {
-        constructor["__WebComponent"] = name;
-        ComponentRegistry[name.toLowerCase()] = constructor;
+export function updateUI() {
+    callbackMap.forEach((callbacks, el)=>{
+        if (debug) {
+            let p;
+            for (p = el as Node; p; p = p.parentNode) {
+                if (p.nodeType == 9) {
+                    break;
+                }
+            }
+            if (p == null) {
+                console.log("Updating unmounted [" + el.nodeName + "]");
+            }
+        }
+        for (const cb of callbacks) {
+            cb();
+        }
+    });
+}
+
+export function act(fn:()=>void):void {
+    try {
+        fn();
+    } finally {
+        updateUI();
     }
+}
+
+export function unmount(el: Element) {
+    callbackMap.delete(el);
+    for (let c = el.firstElementChild; c; c = c.nextElementSibling)
+        unmount(c);
+}
+
+export function onUpdate(el: Element, callback:(Element)=>void) {
+    let callbacks = callbackMap.get(el);
+    if (callbacks == null) {
+        callbacks = [];
+        callbackMap.set(el, callbacks);
+    }
+    callbacks.push(callback);
 }
 
 function applyStyleProp(el, k, val) {
@@ -28,28 +62,21 @@ function applyAttribute(el, k, val) {
     el.setAttribute(k, val);
 }
 
-function needsApply(ctx, val) {
-    return ((typeof val === 'object' && typeof val.then === 'function') ||
-     (typeof val === 'object' && typeof val.value === 'function') ||
-    (typeof val === 'function' && ctx != null));
+function needsApply(val) {
+    return (typeof val === 'function');
 }
 
-function applyValue(ctx, pval, callback) {
-    const val = (typeof pval === 'function' && ctx != null) ? ctx.value(pval) : pval;
-    if (typeof val === 'object' && typeof val.then === 'function') {
-        val.then((v)=>callback(v))
-    } else if (typeof val === 'object' && typeof val.value === 'function') {
-        callback(val.value());
-        if (typeof val.on === 'function') {
-            val.on("update", (v)=>callback(v));
-        }
+function applyValue(el:Element, pval, callback) {
+    if (typeof pval === 'function') {
+        callback(pval());
+        onUpdate(el, ()=>callback(pval()))
     } else {
-        callback(val);
+        callback(pval);
     }
 }
 
-function setAttribute(ctx, el, prop, val) {
-    if (val == null || prop == '$') {
+function setAttribute(el, prop, val) {
+    if (val == null) {
         return;
     }
     if (prop.length > 2 && prop.substring(0, 2) === "on") {
@@ -58,22 +85,22 @@ function setAttribute(ctx, el, prop, val) {
         if (typeof val === "object" && val != null) {
             Object.keys(val).forEach(k=>{
                 let stylePropVal = val[k];
-                applyValue(ctx, stylePropVal, (v)=>applyStyleProp(el, k, v))
+                applyValue(el, stylePropVal, (v)=>applyStyleProp(el, k, v))
             });
         }
     } else {
-        applyValue(ctx, val, (v)=>applyAttribute(el, prop, v));
+        applyValue(el, val, (v)=>applyAttribute(el, prop, v));
     }
 }
 
-function applyContent(ctx, el, c1, c2, v) {
+function applyContent(el, c1, c2, v) {
     while (c1.nextSibling != c2) {
         el.removeChild(c1.nextSibling);
     }
-    append(ctx, el, v, c2);
+    append(el, v, c2);
 }
 
-function append(ctx, el, c, before:Node) {
+function append(el, c, before:Node) {
     if (c == null) return;
     if (c instanceof Node) {
         if (before)
@@ -81,19 +108,13 @@ function append(ctx, el, c, before:Node) {
         else
             el.appendChild(c);
     } else if (c instanceof Array) {
-        c.forEach(i => append(ctx, el, i, before));
-    } else if (typeof c === "object" && "constructor" in c && c.constructor.__WebComponent != null) {
-        append(ctx, el, c._el, before);
-    } else if (needsApply(ctx, c)) {
+        c.forEach(i => append(el, i, before));
+    } else if (needsApply(c)) {
         const c1 = document.createComment("");
         const c2 = document.createComment("");
         el.appendChild(c1);
         el.appendChild(c2);
-        applyValue(ctx, c, (v)=>applyContent(ctx, el, c1, c2, v));
-    } else if (typeof c === 'object' && typeof c.on === 'function') {
-        c.on('data',(v)=>{
-            el.appendChild(document.createTextNode("" + v));
-        })
+        applyValue(el, c, (v)=>applyContent(el, c1, c2, v));
     } else if (before) {
         el.insertBefore(document.createTextNode("" + c), before);
     } else {
@@ -102,59 +123,17 @@ function append(ctx, el, c, before:Node) {
 }
 
 export default function usx(tag, props, ...children) {
-    const ctx = props != null ? props.$ : null;
     if (typeof tag === 'string') {
         const el = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
-        append(ctx, el, children,null);
+        append(el, children,null);
         if (props != null) {
-            Object.keys(props).forEach(k => setAttribute(ctx, el, k, props[k]));
+            Object.keys(props).forEach(k => setAttribute(el, k, props[k]));
         }
 
         return el;
     } else if (typeof tag === 'function') {
-        let result;
-        if (tag["__WebComponent"] != null) {
-            return new tag(props, children);
-        } else
-            return tag(props, children);
+        return tag(props, children);
     } else {
         return null;
-    }
-}
-
-function componentFromDOM(el, construct) {
-    const props = {};
-    const children = [];
-    for (var i = 0; i < el.attributes.length; i++) {
-        var attrib = el.attributes[i];
-        props[attrib.name] = attrib.value;
-    }
-    for (let child = el.firstChild; child; child = child.nextSibling) {
-        if (child.nodeType == 1 && ComponentRegistry[child.localName.toLowerCase()]) {
-            children.push(componentFromDOM(child, ComponentRegistry[child.localName.toLowerCase()]))
-        } else {
-            children.push(child);
-        }
-    }
-
-    return new construct(props, children);
-
-}
-
-export function automount(root?) {
-    if (root == null) root = document.body;
-
-    let nextSibling;
-    for (let el = root.firstChild; el; el = nextSibling) {
-        nextSibling = el.nextSibling;
-        if (el.nodeType != 1) continue;
-        const lowerName = el.localName.toLowerCase();
-        if (ComponentRegistry[lowerName]) {
-            const component = componentFromDOM(el, ComponentRegistry[lowerName]);
-            append(null, el.parentElement, component, el);
-            el.parentElement.removeChild(el);
-        } else {
-            automount(el);
-        }
     }
 }

@@ -1,16 +1,58 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
-const matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
-const SVGNS = "http://www.w3.org/2000/svg";
-const ComponentRegistry = {};
-function WebComponent(name) {
-    return function (constructor) {
-        constructor["__WebComponent"] = name;
-        ComponentRegistry[name.toLowerCase()] = constructor;
-    };
+var matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
+var matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
+var SVGNS = "http://www.w3.org/2000/svg";
+var callbackMap = new Map();
+var debug = false;
+function enableDebugging() {
+    debug = true;
 }
-exports.WebComponent = WebComponent;
+exports.enableDebugging = enableDebugging;
+function updateUI() {
+    callbackMap.forEach(function (callbacks, el) {
+        if (debug) {
+            var p = void 0;
+            for (p = el; p; p = p.parentNode) {
+                if (p.nodeType == 9) {
+                    break;
+                }
+            }
+            if (p == null) {
+                console.log("Updating unmounted [" + el.nodeName + "]");
+            }
+        }
+        for (var _i = 0, callbacks_1 = callbacks; _i < callbacks_1.length; _i++) {
+            var cb = callbacks_1[_i];
+            cb();
+        }
+    });
+}
+exports.updateUI = updateUI;
+function act(fn) {
+    try {
+        fn();
+    }
+    finally {
+        updateUI();
+    }
+}
+exports.act = act;
+function unmount(el) {
+    callbackMap.delete(el);
+    for (var c = el.firstElementChild; c; c = c.nextElementSibling)
+        unmount(c);
+}
+exports.unmount = unmount;
+function onUpdate(el, callback) {
+    var callbacks = callbackMap.get(el);
+    if (callbacks == null) {
+        callbacks = [];
+        callbackMap.set(el, callbacks);
+    }
+    callbacks.push(callback);
+}
+exports.onUpdate = onUpdate;
 function applyStyleProp(el, k, val) {
     if (typeof val === "number" && matchPx.test(k))
         el.style[k] = val + "px";
@@ -20,28 +62,20 @@ function applyStyleProp(el, k, val) {
 function applyAttribute(el, k, val) {
     el.setAttribute(k, val);
 }
-function needsApply(ctx, val) {
-    return ((typeof val === 'object' && typeof val.then === 'function') ||
-        (typeof val === 'object' && typeof val.value === 'function') ||
-        (typeof val === 'function' && ctx != null));
+function needsApply(val) {
+    return (typeof val === 'function');
 }
-function applyValue(ctx, pval, callback) {
-    const val = (typeof pval === 'function' && ctx != null) ? ctx.value(pval) : pval;
-    if (typeof val === 'object' && typeof val.then === 'function') {
-        val.then((v) => callback(v));
-    }
-    else if (typeof val === 'object' && typeof val.value === 'function') {
-        callback(val.value());
-        if (typeof val.on === 'function') {
-            val.on("update", (v) => callback(v));
-        }
+function applyValue(el, pval, callback) {
+    if (typeof pval === 'function') {
+        callback(pval());
+        onUpdate(el, function () { return callback(pval()); });
     }
     else {
-        callback(val);
+        callback(pval);
     }
 }
-function setAttribute(ctx, el, prop, val) {
-    if (val == null || prop == '$') {
+function setAttribute(el, prop, val) {
+    if (val == null) {
         return;
     }
     if (prop.length > 2 && prop.substring(0, 2) === "on") {
@@ -49,23 +83,23 @@ function setAttribute(ctx, el, prop, val) {
     }
     else if (prop === "style") {
         if (typeof val === "object" && val != null) {
-            Object.keys(val).forEach(k => {
-                let stylePropVal = val[k];
-                applyValue(ctx, stylePropVal, (v) => applyStyleProp(el, k, v));
+            Object.keys(val).forEach(function (k) {
+                var stylePropVal = val[k];
+                applyValue(el, stylePropVal, function (v) { return applyStyleProp(el, k, v); });
             });
         }
     }
     else {
-        applyValue(ctx, val, (v) => applyAttribute(el, prop, v));
+        applyValue(el, val, function (v) { return applyAttribute(el, prop, v); });
     }
 }
-function applyContent(ctx, el, c1, c2, v) {
+function applyContent(el, c1, c2, v) {
     while (c1.nextSibling != c2) {
         el.removeChild(c1.nextSibling);
     }
-    append(ctx, el, v, c2);
+    append(el, v, c2);
 }
-function append(ctx, el, c, before) {
+function append(el, c, before) {
     if (c == null)
         return;
     if (c instanceof Node) {
@@ -75,22 +109,14 @@ function append(ctx, el, c, before) {
             el.appendChild(c);
     }
     else if (c instanceof Array) {
-        c.forEach(i => append(ctx, el, i, before));
+        c.forEach(function (i) { return append(el, i, before); });
     }
-    else if (typeof c === "object" && "constructor" in c && c.constructor.__WebComponent != null) {
-        append(ctx, el, c._el, before);
-    }
-    else if (needsApply(ctx, c)) {
-        const c1 = document.createComment("");
-        const c2 = document.createComment("");
-        el.appendChild(c1);
-        el.appendChild(c2);
-        applyValue(ctx, c, (v) => applyContent(ctx, el, c1, c2, v));
-    }
-    else if (typeof c === 'object' && typeof c.on === 'function') {
-        c.on('data', (v) => {
-            el.appendChild(document.createTextNode("" + v));
-        });
+    else if (needsApply(c)) {
+        var c1_1 = document.createComment("");
+        var c2_1 = document.createComment("");
+        el.appendChild(c1_1);
+        el.appendChild(c2_1);
+        applyValue(el, c, function (v) { return applyContent(el, c1_1, c2_1, v); });
     }
     else if (before) {
         el.insertBefore(document.createTextNode("" + c), before);
@@ -99,63 +125,24 @@ function append(ctx, el, c, before) {
         el.appendChild(document.createTextNode("" + c));
     }
 }
-function usx(tag, props, ...children) {
-    const ctx = props != null ? props.$ : null;
+function usx(tag, props) {
+    var children = [];
+    for (var _i = 2; _i < arguments.length; _i++) {
+        children[_i - 2] = arguments[_i];
+    }
     if (typeof tag === 'string') {
-        const el = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
-        append(ctx, el, children, null);
+        var el_1 = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
+        append(el_1, children, null);
         if (props != null) {
-            Object.keys(props).forEach(k => setAttribute(ctx, el, k, props[k]));
+            Object.keys(props).forEach(function (k) { return setAttribute(el_1, k, props[k]); });
         }
-        return el;
+        return el_1;
     }
     else if (typeof tag === 'function') {
-        let result;
-        if (tag["__WebComponent"] != null) {
-            return new tag(props, children);
-        }
-        else
-            return tag(props, children);
+        return tag(props, children);
     }
     else {
         return null;
     }
 }
 exports.default = usx;
-function componentFromDOM(el, construct) {
-    const props = {};
-    const children = [];
-    for (var i = 0; i < el.attributes.length; i++) {
-        var attrib = el.attributes[i];
-        props[attrib.name] = attrib.value;
-    }
-    for (let child = el.firstChild; child; child = child.nextSibling) {
-        if (child.nodeType == 1 && ComponentRegistry[child.localName.toLowerCase()]) {
-            children.push(componentFromDOM(child, ComponentRegistry[child.localName.toLowerCase()]));
-        }
-        else {
-            children.push(child);
-        }
-    }
-    return new construct(props, children);
-}
-function automount(root) {
-    if (root == null)
-        root = document.body;
-    let nextSibling;
-    for (let el = root.firstChild; el; el = nextSibling) {
-        nextSibling = el.nextSibling;
-        if (el.nodeType != 1)
-            continue;
-        const lowerName = el.localName.toLowerCase();
-        if (ComponentRegistry[lowerName]) {
-            const component = componentFromDOM(el, ComponentRegistry[lowerName]);
-            append(null, el.parentElement, component, el);
-            el.parentElement.removeChild(el);
-        }
-        else {
-            automount(el);
-        }
-    }
-}
-exports.automount = automount;
