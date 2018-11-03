@@ -35,6 +35,17 @@ describe('Simple usx test', ()=>{
         expect(el.id).to.equal('div1');
         expect(el.style.fontBold).to.equal(true);
     })
+    it('construct div with computed style', () => {
+        let isBold = true;
+        const el = usx('div', {class: 'my-div', id: 'div1', style: {fontBold: ()=>isBold}});
+        expect(el.className).to.equal('my-div');
+        expect(el.id).to.equal('div1');
+        expect(el.style.fontBold).to.equal(true);
+        isBold = false;
+        updateUI();
+        expect(el.style.fontBold).to.equal(false);
+
+    })
     it('construct div with bad style', () => {
         const el = usx('div', {class: 'my-div', id: 'div1', style: 12});
         expect(el.className).to.equal('my-div');
@@ -61,13 +72,34 @@ describe('Simple usx test', ()=>{
     })
     it('construct link with click handler', () => {
         let clickCount = 0;
-        const clickHandler = ()=>{
-            clickCount++;
-        }
-        const el = usx('a', {class:'linky', href:' #', onClick: clickHandler}, 'Click me');
+        const el = usx('a', {class:'linky', href:' #', onClick: ()=>clickCount++}, 'Click me');
 
         el.click();
         expect(clickCount).to.equal(1);
+    }),
+    it('construct link with bad click handler', () => {
+        let clickCount = 0;
+        const el = usx('a', {class:'linky', href:' #', onClick: "clicky"}, 'Click me');
+
+        el.click();
+        expect(clickCount).to.equal(0);
+    }),
+    it('direct attribute test', ()=>{
+        let isChecked = false;
+        const el = usx('input', {type: 'checkbox', checked: ()=>isChecked});
+        expect(el.checked).to.equal(false);
+        isChecked = true;
+        updateUI();
+        expect(el.checked).to.equal(true);
+    }),
+    it('clear attribute test', ()=>{
+        let className = "my-div";
+        const el = usx('div', {class: ()=>className, id: null});
+        expect(el.hasAttribute('class')).to.equal(true);
+        expect(el.className).to.equal('my-div');
+        className = null;
+        updateUI();
+        expect(el.hasAttribute('class')).to.equal(false);
     })
 });
 
@@ -77,7 +109,6 @@ describe('SVG content test', ()=>{
         expect(el.namespaceURI).to.equal(SVGNS);
     })
 });
-
 
 describe('Function component test', ()=>{
     it('construct function component', ()=>{
@@ -153,7 +184,7 @@ describe('Evaluated content', ()=>{
         const el = usx('div', {class: 'my-div', id: ()=>myId});
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
-        usxmodule.act(()=>myId = "div2");
+        usxmodule.action(()=>myId = "div2");
         expect(el.id).to.equal('div2');
     }),
     it('unmount', ()=>{
@@ -162,7 +193,7 @@ describe('Evaluated content', ()=>{
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
         usxmodule.unmount(el);
-        usxmodule.act(()=>myId = "div2");
+        usxmodule.action(()=>myId = "div2");
         expect(el.id).to.equal('div1');
     }),
     it('unmount', ()=>{
@@ -172,8 +203,7 @@ describe('Evaluated content', ()=>{
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
         usxmodule.unmount(root);
-        usxmodule.act(()=>myId = "div2");
+        usxmodule.action(()=>myId = "div2");
         expect(el.id).to.equal('div1');
     })
-
 })

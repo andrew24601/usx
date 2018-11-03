@@ -1,5 +1,7 @@
 const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
 const matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
+const directAttribute = /^value|checked$/;
+const isEvent = /^on[A-Z]/;
 const SVGNS = "http://www.w3.org/2000/svg";
 
 let callbackMap = new Map<Element, any>();
@@ -11,6 +13,7 @@ export function enableDebugging() {
 
 export function updateUI() {
     callbackMap.forEach((callbacks, el)=>{
+        /* develblock:start */
         if (debug) {
             let p;
             for (p = el as Node; p; p = p.parentNode) {
@@ -22,15 +25,16 @@ export function updateUI() {
                 console.log("Updating unmounted [" + el.nodeName + "]");
             }
         }
+        /* develblock:end */
         for (const cb of callbacks) {
             cb();
         }
     });
 }
 
-export function act(fn:()=>void):void {
+export function action<T>(fn:()=>T):T {
     try {
-        fn();
+        return fn();
     } finally {
         updateUI();
     }
@@ -59,7 +63,12 @@ function applyStyleProp(el, k, val) {
 }
 
 function applyAttribute(el, k, val) {
-    el.setAttribute(k, val);
+    if (directAttribute.test(k))
+        el[k] = val;
+    else if (val != null)
+        el.setAttribute(k, val);
+    else
+        el.removeAttribute(k);
 }
 
 function needsApply(val) {
@@ -79,8 +88,13 @@ function setAttribute(el, prop, val) {
     if (val == null) {
         return;
     }
-    if (prop.length > 2 && prop.substring(0, 2) === "on") {
-        el[prop.toLowerCase()] = val;
+    if (isEvent.test(prop)) {
+        if(typeof val === "function")
+            el[prop.toLowerCase()] = function(...args) { return action(val.bind(this, ...args));}
+        /* develblock:start */
+        else
+            console.log("non-function event");
+        /* develblock:end */
     } else if (prop === "style") {
         if (typeof val === "object" && val != null) {
             Object.keys(val).forEach(k=>{
