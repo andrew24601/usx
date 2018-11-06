@@ -1,10 +1,15 @@
 const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
-const matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
-const directAttribute = /^value|checked$/;
+var matchSVGEl = /^(svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g)$/;
+const directAttribute = /^(value|checked)$/;
 const isEvent = /^on[A-Z]/;
 const SVGNS = "http://www.w3.org/2000/svg";
 
-let callbackMap = new Map<Element, any>();
+interface ElementData {
+    updates: ((Element)=>void)[]
+    unmounts: ((Element)=>void)[]
+}
+
+let elementMap = new Map<Element, ElementData>();
 let debug = false;
 
 export function enableDebugging() {
@@ -12,7 +17,7 @@ export function enableDebugging() {
 }
 
 export function updateUI() {
-    callbackMap.forEach((callbacks, el)=>{
+    elementMap.forEach((map, el)=>{
         /* develblock:start */
         if (debug) {
             let p;
@@ -26,8 +31,8 @@ export function updateUI() {
             }
         }
         /* develblock:end */
-        for (const cb of callbacks) {
-            cb();
+        for (const cb of map.updates) {
+            cb(el);
         }
     });
 }
@@ -41,18 +46,40 @@ export function action<T>(fn:()=>T):T {
 }
 
 export function unmount(el: Element) {
-    callbackMap.delete(el);
-    for (let c = el.firstElementChild; c; c = c.nextElementSibling)
+    try {
+        const ed = dataForEl(el, false);
+        if (ed) {
+            for (const cb of ed.unmounts) {
+                cb(el);
+            }
+        }
+    } finally {
+        elementMap.delete(el);
+    }
+    for (let c = el.firstElementChild; c; c = c.nextElementSibling) {
         unmount(c);
+    }
 }
 
-export function onUpdate(el: Element, callback:(Element)=>void) {
-    let callbacks = callbackMap.get(el);
-    if (callbacks == null) {
-        callbacks = [];
-        callbackMap.set(el, callbacks);
+function dataForEl(el: Element, create: boolean) {
+    let ed = elementMap.get(el);
+    if (ed == null && create) {
+        ed = {
+            updates: [],
+            unmounts: []
+        };
+        elementMap.set(el, ed);
     }
-    callbacks.push(callback);
+    return ed;
+}
+
+export function onUpdateEl(el: Element, callback:(Element)=>void) {
+    dataForEl(el, true).updates.push(callback);
+    callback(el);
+}
+
+export function onUnmountEl(el: Element, callback:(Element)=>void) {
+    dataForEl(el, true).unmounts.push(callback);
 }
 
 function applyStyleProp(el, k, val) {
@@ -63,7 +90,7 @@ function applyStyleProp(el, k, val) {
 }
 
 function applyAttribute(el, k, val) {
-    if (directAttribute.test(k))
+    if (el.tagName === "INPUT" && directAttribute.test(k))
         el[k] = val;
     else if (val != null)
         el.setAttribute(k, val);
@@ -77,8 +104,7 @@ function needsApply(val) {
 
 function applyValue(el:Element, pval, callback) {
     if (typeof pval === 'function') {
-        callback(pval());
-        onUpdate(el, ()=>callback(pval()))
+        onUpdateEl(el, ()=>callback(pval()))
     } else {
         callback(pval);
     }

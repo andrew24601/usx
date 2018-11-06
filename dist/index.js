@@ -1,15 +1,15 @@
 var matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
-var matchSVGEl = /^svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g$/;
-var directAttribute = /^value|checked$/;
+var matchSVGEl = /^(svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g)$/;
+var directAttribute = /^(value|checked)$/;
 var isEvent = /^on[A-Z]/;
 var SVGNS = "http://www.w3.org/2000/svg";
-var callbackMap = new Map();
+var elementMap = new Map();
 var debug = false;
 export function enableDebugging() {
     debug = true;
 }
 export function updateUI() {
-    callbackMap.forEach(function (callbacks, el) {
+    elementMap.forEach(function (map, el) {
         /* develblock:start */
         if (debug) {
             var p = void 0;
@@ -23,9 +23,9 @@ export function updateUI() {
             }
         }
         /* develblock:end */
-        for (var _i = 0, callbacks_1 = callbacks; _i < callbacks_1.length; _i++) {
-            var cb = callbacks_1[_i];
-            cb();
+        for (var _i = 0, _a = map.updates; _i < _a.length; _i++) {
+            var cb = _a[_i];
+            cb(el);
         }
     });
 }
@@ -38,17 +38,39 @@ export function action(fn) {
     }
 }
 export function unmount(el) {
-    callbackMap.delete(el);
-    for (var c = el.firstElementChild; c; c = c.nextElementSibling)
-        unmount(c);
-}
-export function onUpdate(el, callback) {
-    var callbacks = callbackMap.get(el);
-    if (callbacks == null) {
-        callbacks = [];
-        callbackMap.set(el, callbacks);
+    try {
+        var ed = dataForEl(el, false);
+        if (ed) {
+            for (var _i = 0, _a = ed.unmounts; _i < _a.length; _i++) {
+                var cb = _a[_i];
+                cb(el);
+            }
+        }
     }
-    callbacks.push(callback);
+    finally {
+        elementMap.delete(el);
+    }
+    for (var c = el.firstElementChild; c; c = c.nextElementSibling) {
+        unmount(c);
+    }
+}
+function dataForEl(el, create) {
+    var ed = elementMap.get(el);
+    if (ed == null && create) {
+        ed = {
+            updates: [],
+            unmounts: []
+        };
+        elementMap.set(el, ed);
+    }
+    return ed;
+}
+export function onUpdateEl(el, callback) {
+    dataForEl(el, true).updates.push(callback);
+    callback(el);
+}
+export function onUnmountEl(el, callback) {
+    dataForEl(el, true).unmounts.push(callback);
 }
 function applyStyleProp(el, k, val) {
     if (typeof val === "number" && matchPx.test(k))
@@ -57,7 +79,7 @@ function applyStyleProp(el, k, val) {
         el.style[k] = val;
 }
 function applyAttribute(el, k, val) {
-    if (directAttribute.test(k))
+    if (el.tagName === "INPUT" && directAttribute.test(k))
         el[k] = val;
     else if (val != null)
         el.setAttribute(k, val);
@@ -69,8 +91,7 @@ function needsApply(val) {
 }
 function applyValue(el, pval, callback) {
     if (typeof pval === 'function') {
-        callback(pval());
-        onUpdate(el, function () { return callback(pval()); });
+        onUpdateEl(el, function () { return callback(pval()); });
     }
     else {
         callback(pval);

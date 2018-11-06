@@ -170,7 +170,7 @@ describe('Evaluated content', ()=>{
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
 
-        usxmodule.onUpdate(el, ()=>{
+        usxmodule.onUpdateEl(el, ()=>{
             wasUpdated = true;
         });
 
@@ -199,11 +199,18 @@ describe('Evaluated content', ()=>{
     it('unmount', ()=>{
         let myId = "div1";
         const el = usx('div', {class: 'my-div', id: ()=>myId});
-        const root = usx("div", {class: 'my-div', name: ()=>myId}, el)
+        const root = usx("div", {class: 'my-div', name: "fred"}, el)
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
+
+        let wasUnmounted = false;
+        usxmodule.onUnmountEl(el, ()=>{
+            wasUnmounted = true;
+        })
+
         usxmodule.unmount(root);
         usxmodule.action(()=>myId = "div2");
         expect(el.id).to.equal('div1');
+        expect(wasUnmounted).to.equal(true);
     })
 })
