@@ -11,30 +11,44 @@ interface ElementData {
 
 let elementMap = new Map<Element, ElementData>();
 let debug = false;
+let inUpdateUI = false;
 
 export function enableDebugging() {
     debug = true;
 }
 
 export function updateUI() {
-    elementMap.forEach((map, el)=>{
+    if (inUpdateUI) {
         /* develblock:start */
         if (debug) {
-            let p;
-            for (p = el as Node; p; p = p.parentNode) {
-                if (p.nodeType == 9) {
-                    break;
-                }
-            }
-            if (p == null) {
-                console.log("Updating unmounted [" + el.nodeName + "]");
-            }
+            console.log("Nested call to updateUI");
         }
         /* develblock:end */
-        for (const cb of map.updates) {
-            cb(el);
-        }
-    });
+        return;
+    }
+    inUpdateUI = true;
+    try {
+        elementMap.forEach((map, el)=>{
+            /* develblock:start */
+            if (debug) {
+                let p;
+                for (p = el as Node; p; p = p.parentNode) {
+                    if (p.nodeType == 9) {
+                        break;
+                    }
+                }
+                if (p == null) {
+                    console.log("Updating unmounted [" + el.nodeName + "]");
+                }
+            }
+            /* develblock:end */
+            for (const cb of map.updates) {
+                cb(el);
+            }
+        });
+    } finally {
+        inUpdateUI = false;
+    }
 }
 
 export function action<T>(fn:()=>T):T {
@@ -110,13 +124,14 @@ function applyValue(el:Element, pval, callback) {
     }
 }
 
-function setAttribute(el, prop, val) {
+function setAttribute(el:HTMLElement|SVGElement, prop:string, val) {
     if (val == null) {
         return;
     }
     if (isEvent.test(prop)) {
-        if(typeof val === "function")
-            el[prop.toLowerCase()] = function(...args) { return action(val.bind(this, ...args));}
+        if(typeof val === "function") {
+            el.addEventListener(prop.substr(2).toLowerCase(), function(...args) { return action(val.bind(this, ...args))})
+        }
         /* develblock:start */
         else
             console.log("non-function event");

@@ -5,29 +5,44 @@ var isEvent = /^on[A-Z]/;
 var SVGNS = "http://www.w3.org/2000/svg";
 var elementMap = new Map();
 var debug = false;
+var inUpdateUI = false;
 export function enableDebugging() {
     debug = true;
 }
 export function updateUI() {
-    elementMap.forEach(function (map, el) {
+    if (inUpdateUI) {
         /* develblock:start */
         if (debug) {
-            var p = void 0;
-            for (p = el; p; p = p.parentNode) {
-                if (p.nodeType == 9) {
-                    break;
-                }
-            }
-            if (p == null) {
-                console.log("Updating unmounted [" + el.nodeName + "]");
-            }
+            console.log("Nested call to updateUI");
         }
         /* develblock:end */
-        for (var _i = 0, _a = map.updates; _i < _a.length; _i++) {
-            var cb = _a[_i];
-            cb(el);
-        }
-    });
+        return;
+    }
+    inUpdateUI = true;
+    try {
+        elementMap.forEach(function (map, el) {
+            /* develblock:start */
+            if (debug) {
+                var p = void 0;
+                for (p = el; p; p = p.parentNode) {
+                    if (p.nodeType == 9) {
+                        break;
+                    }
+                }
+                if (p == null) {
+                    console.log("Updating unmounted [" + el.nodeName + "]");
+                }
+            }
+            /* develblock:end */
+            for (var _i = 0, _a = map.updates; _i < _a.length; _i++) {
+                var cb = _a[_i];
+                cb(el);
+            }
+        });
+    }
+    finally {
+        inUpdateUI = false;
+    }
 }
 export function action(fn) {
     try {
@@ -102,14 +117,15 @@ function setAttribute(el, prop, val) {
         return;
     }
     if (isEvent.test(prop)) {
-        if (typeof val === "function")
-            el[prop.toLowerCase()] = function () {
+        if (typeof val === "function") {
+            el.addEventListener(prop.substr(2).toLowerCase(), function () {
                 var args = [];
                 for (var _i = 0; _i < arguments.length; _i++) {
                     args[_i] = arguments[_i];
                 }
                 return action(val.bind.apply(val, [this].concat(args)));
-            };
+            });
+        }
         /* develblock:start */
         else
             console.log("non-function event");
