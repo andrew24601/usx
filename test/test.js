@@ -4,6 +4,7 @@ const usxmodule = require('../distcjs/index');
 
 const usx = usxmodule.default;
 const updateUI = usxmodule.updateUI;
+const onUpdateEl = usxmodule.onUpdateEl;
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -170,7 +171,7 @@ describe('Evaluated content', ()=>{
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
 
-        usxmodule.onUpdateEl(el, ()=>{
+        onUpdateEl(el, ()=>{
             wasUpdated = true;
         });
 
@@ -213,4 +214,48 @@ describe('Evaluated content', ()=>{
         expect(el.id).to.equal('div1');
         expect(wasUnmounted).to.equal(true);
     })
+});
+
+describe('Multi context', ()=>{
+    it('single context', ()=>{
+        const ctx = usxmodule.createContext();
+        const ctxusx = ctx.usx;
+        let myId = "div1";
+        const el = ctxusx('div', {class: 'my-div', id: ()=>myId});
+        expect(el.className).to.equal('my-div');
+        expect(el.id).to.equal('div1');
+        myId = "div2";
+        ctx.updateUI();
+        expect(el.id).to.equal('div2');
+    });
+    it('single context is separate from default', ()=>{
+        const ctx = usxmodule.createContext();
+        const ctxusx = ctx.usx;
+        let myId = "div1";
+        const el = ctxusx('div', {class: 'my-div', id: ()=>myId});
+        expect(el.className).to.equal('my-div');
+        expect(el.id).to.equal('div1');
+        myId = "div2";
+        updateUI();
+        expect(el.id).to.equal('div1');
+        ctx.updateUI();
+        expect(el.id).to.equal('div2');
+    });
 })
+
+describe('nested updateUI', ()=>{
+    it ('nest', ()=>{
+        let invokeCount = 0;
+        const el = usx('div', { onMyTestEvent:()=>{
+            invokeCount++;
+        } });
+        const el2 = usx('div');
+        onUpdateEl(el2, ()=>{
+            el.dispatchEvent(new CustomEvent("mytestevent"));
+        });
+        expect(invokeCount).to.equal(2);
+        usxmodule.enableDebugging(false);
+        updateUI();
+        expect(invokeCount).to.equal(3);
+    })
+});
