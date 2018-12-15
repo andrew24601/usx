@@ -9,42 +9,24 @@ interface ElementData {
     unmounts: ((Element)=>void)[]
 }
 
-
-let debug = false;
 let inUpdateUI = false;
 
-export function enableDebugging(setting?:boolean) {
-    debug = setting!==false;
-}
-
-export function createContext() {
+export function createUIContext() {
     let elementMap = new Map<Element, ElementData>();
+
+    function forEachUI(cb:(el:Element)=>void) {
+        elementMap.forEach((map, el)=>{
+            cb(el);
+        });
+    }
 
     function updateUI() {
         if (inUpdateUI) {
-            /* develblock:start */
-            if (debug) {
-                console.log("Nested call to updateUI");
-            }
-            /* develblock:end */
             return;
         }
         inUpdateUI = true;
         try {
             elementMap.forEach((map, el)=>{
-                /* develblock:start */
-                if (debug) {
-                    let p;
-                    for (p = el as Node; p; p = p.parentNode) {
-                        if (p.nodeType == 9) {
-                            break;
-                        }
-                    }
-                    if (p == null) {
-                        console.log("Updating unmounted [" + el.nodeName + "]");
-                    }
-                }
-                /* develblock:end */
                 for (const cb of map.updates) {
                     cb(el);
                 }
@@ -62,7 +44,7 @@ export function createContext() {
         }
     }
     
-    function unmount(el: Element) {
+    function unmountUI(el: Element) {
         try {
             const ed = dataForEl(el, false);
             if (ed) {
@@ -74,7 +56,7 @@ export function createContext() {
             elementMap.delete(el);
         }
         for (let c = el.firstElementChild; c; c = c.nextElementSibling) {
-            unmount(c);
+            unmountUI(c);
         }
     }
     
@@ -90,12 +72,12 @@ export function createContext() {
         return ed;
     }
     
-    function onUpdateEl(el: Element, callback:(Element)=>void) {
+    function onUpdateUI(el: Element, callback:(Element)=>void) {
         dataForEl(el, true).updates.push(callback);
         callback(el);
     }
     
-    function onUnmountEl(el: Element, callback:(Element)=>void) {
+    function onUnmountUI(el: Element, callback:(Element)=>void) {
         dataForEl(el, true).unmounts.push(callback);
     }
     
@@ -121,7 +103,7 @@ export function createContext() {
     
     function applyValue(el:Element, pval, callback) {
         if (typeof pval === 'function') {
-            onUpdateEl(el, ()=>callback(pval()))
+            onUpdateUI(el, ()=>callback(pval()))
         } else {
             callback(pval);
         }
@@ -197,16 +179,16 @@ export function createContext() {
     }
     
     return {
-        usx, updateUI, onUpdateEl, onUnmountEl, unmount, action
+        usx, updateUI, onUpdateUI, onUnmountUI, forEachUI, unmountUI
     }
 }
 
-export const defaultContext = createContext();
+export const defaultContext = createUIContext();
 export const updateUI = defaultContext.updateUI;
-export const onUpdateEl = defaultContext.onUpdateEl;
-export const onUnmountEl = defaultContext.onUnmountEl;
-export const unmount = defaultContext.unmount;
-export const action = defaultContext.action;
+export const onUpdateUI = defaultContext.onUpdateUI;
+export const onUnmountUI = defaultContext.onUnmountUI;
+export const forEachUI = defaultContext.forEachUI;
+export const unmountUI = defaultContext.unmountUI;
 
 const usx = defaultContext.usx;
 

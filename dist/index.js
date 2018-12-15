@@ -3,38 +3,21 @@ var matchSVGEl = /^(svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(
 var directAttribute = /^(value|checked)$/;
 var isEvent = /^on[A-Z]/;
 var SVGNS = "http://www.w3.org/2000/svg";
-var debug = false;
 var inUpdateUI = false;
-export function enableDebugging(setting) {
-    debug = setting !== false;
-}
-export function createContext() {
+export function createUIContext() {
     var elementMap = new Map();
+    function forEachUI(cb) {
+        elementMap.forEach(function (map, el) {
+            cb(el);
+        });
+    }
     function updateUI() {
         if (inUpdateUI) {
-            /* develblock:start */
-            if (debug) {
-                console.log("Nested call to updateUI");
-            }
-            /* develblock:end */
             return;
         }
         inUpdateUI = true;
         try {
             elementMap.forEach(function (map, el) {
-                /* develblock:start */
-                if (debug) {
-                    var p = void 0;
-                    for (p = el; p; p = p.parentNode) {
-                        if (p.nodeType == 9) {
-                            break;
-                        }
-                    }
-                    if (p == null) {
-                        console.log("Updating unmounted [" + el.nodeName + "]");
-                    }
-                }
-                /* develblock:end */
                 for (var _i = 0, _a = map.updates; _i < _a.length; _i++) {
                     var cb = _a[_i];
                     cb(el);
@@ -53,7 +36,7 @@ export function createContext() {
             updateUI();
         }
     }
-    function unmount(el) {
+    function unmountUI(el) {
         try {
             var ed = dataForEl(el, false);
             if (ed) {
@@ -67,7 +50,7 @@ export function createContext() {
             elementMap.delete(el);
         }
         for (var c = el.firstElementChild; c; c = c.nextElementSibling) {
-            unmount(c);
+            unmountUI(c);
         }
     }
     function dataForEl(el, create) {
@@ -81,11 +64,11 @@ export function createContext() {
         }
         return ed;
     }
-    function onUpdateEl(el, callback) {
+    function onUpdateUI(el, callback) {
         dataForEl(el, true).updates.push(callback);
         callback(el);
     }
-    function onUnmountEl(el, callback) {
+    function onUnmountUI(el, callback) {
         dataForEl(el, true).unmounts.push(callback);
     }
     function applyStyleProp(el, k, val) {
@@ -107,7 +90,7 @@ export function createContext() {
     }
     function applyValue(el, pval, callback) {
         if (typeof pval === 'function') {
-            onUpdateEl(el, function () { return callback(pval()); });
+            onUpdateUI(el, function () { return callback(pval()); });
         }
         else {
             callback(pval);
@@ -197,14 +180,14 @@ export function createContext() {
         }
     }
     return {
-        usx: usx, updateUI: updateUI, onUpdateEl: onUpdateEl, onUnmountEl: onUnmountEl, unmount: unmount, action: action
+        usx: usx, updateUI: updateUI, onUpdateUI: onUpdateUI, onUnmountUI: onUnmountUI, forEachUI: forEachUI, unmountUI: unmountUI
     };
 }
-export var defaultContext = createContext();
+export var defaultContext = createUIContext();
 export var updateUI = defaultContext.updateUI;
-export var onUpdateEl = defaultContext.onUpdateEl;
-export var onUnmountEl = defaultContext.onUnmountEl;
-export var unmount = defaultContext.unmount;
-export var action = defaultContext.action;
+export var onUpdateUI = defaultContext.onUpdateUI;
+export var onUnmountUI = defaultContext.onUnmountUI;
+export var forEachUI = defaultContext.forEachUI;
+export var unmountUI = defaultContext.unmountUI;
 var usx = defaultContext.usx;
 export default usx;
