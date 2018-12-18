@@ -1,6 +1,6 @@
 {
   "name": "usx",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Minimal vanilla jsx",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
