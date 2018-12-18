@@ -3,9 +3,9 @@ var matchSVGEl = /^(svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(
 var directAttribute = /^(value|checked)$/;
 var isEvent = /^on[A-Z]/;
 var SVGNS = "http://www.w3.org/2000/svg";
-var inUpdateUI = false;
-export function createUIContext() {
+function createUIContext() {
     var elementMap = new Map();
+    var inUpdateUI = false;
     function forEachUI(cb) {
         elementMap.forEach(function (map, el) {
             cb(el);
@@ -179,15 +179,13 @@ export function createUIContext() {
             return null;
         }
     }
-    return {
-        usx: usx, updateUI: updateUI, onUpdateUI: onUpdateUI, onUnmountUI: onUnmountUI, forEachUI: forEachUI, unmountUI: unmountUI
-    };
+    usx.create = createUIContext;
+    usx.update = updateUI;
+    usx.onUpdate = onUpdateUI;
+    usx.onUnmount = onUnmountUI;
+    usx.unmount = unmountUI;
+    usx.forEach = forEachUI;
+    return usx;
 }
-export var defaultContext = createUIContext();
-export var updateUI = defaultContext.updateUI;
-export var onUpdateUI = defaultContext.onUpdateUI;
-export var onUnmountUI = defaultContext.onUnmountUI;
-export var forEachUI = defaultContext.forEachUI;
-export var unmountUI = defaultContext.unmountUI;
-var usx = defaultContext.usx;
+var usx = createUIContext();
 export default usx;

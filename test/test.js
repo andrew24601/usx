@@ -3,8 +3,8 @@ const { expect } = require('chai');
 const usxmodule = require('../distcjs/index');
 
 const usx = usxmodule.default;
-const updateUI = usxmodule.updateUI;
-const onUpdateUI = usxmodule.onUpdateUI;
+const updateUI = usx.update;
+const onUpdateUI = usx.onUpdate;
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -183,7 +183,7 @@ describe('Evaluated content', ()=>{
         const el = usx('div', {class: 'my-div', id: ()=>myId});
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
-        usxmodule.unmountUI(el);
+        usx.unmount(el);
         myId = "div2";
         updateUI();
         expect(el.id).to.equal('div1');
@@ -196,11 +196,11 @@ describe('Evaluated content', ()=>{
         expect(el.id).to.equal('div1');
 
         let wasUnmounted = false;
-        usxmodule.onUnmountUI(el, ()=>{
+        usx.onUnmount(el, ()=>{
             wasUnmounted = true;
         })
 
-        usxmodule.unmountUI(root);
+        usx.unmount(root);
         myId = "div2";
         updateUI();
         expect(el.id).to.equal('div1');
@@ -210,27 +210,25 @@ describe('Evaluated content', ()=>{
 
 describe('Multi context', ()=>{
     it('single context', ()=>{
-        const ctx = usxmodule.createUIContext();
-        const ctxusx = ctx.usx;
+        const ctx = usx.create();
         let myId = "div1";
-        const el = ctxusx('div', {class: 'my-div', id: ()=>myId});
+        const el = ctx('div', {class: 'my-div', id: ()=>myId});
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
         myId = "div2";
-        ctx.updateUI();
+        ctx.update();
         expect(el.id).to.equal('div2');
     });
     it('single context is separate from default', ()=>{
-        const ctx = usxmodule.createUIContext();
-        const ctxusx = ctx.usx;
+        const ctx = usx.create();
         let myId = "div1";
-        const el = ctxusx('div', {class: 'my-div', id: ()=>myId});
+        const el = ctx('div', {class: 'my-div', id: ()=>myId});
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
         myId = "div2";
         updateUI();
         expect(el.id).to.equal('div1');
-        ctx.updateUI();
+        ctx.update();
         expect(el.id).to.equal('div2');
     });
 })
@@ -253,27 +251,27 @@ describe('nested updateUI', ()=>{
 
 function contextCount(ctx) {
     let count = 0;
-    ctx.forEachUI(e=>count++);
+    ctx.forEach(e=>count++);
     return count;
 }
 
 describe('introspect', ()=>{
-    expect(contextCount(usxmodule.defaultContext)).to.equal(0);
+    expect(contextCount(usx)).to.equal(0);
 
     const staticEl = usx("input", {type: "text"});
 
-    expect(contextCount(usxmodule.defaultContext)).to.equal(0);
+    expect(contextCount(usx)).to.equal(0);
 
     let myId = "div1";
     const el = usx('div', {class: 'my-div', id: ()=>myId});
 
-    expect(contextCount(usxmodule.defaultContext)).to.equal(1);
+    expect(contextCount(usx)).to.equal(1);
 
     count = 0;
-    usxmodule.forEachUI(e=>count++);
+    usx.forEach(e=>count++);
     expect(count).to.equal(1);
 
-    usxmodule.unmountUI(el);
+    usx.unmount(el);
 
-    expect(contextCount(usxmodule.defaultContext)).to.equal(0);
+    expect(contextCount(usx)).to.equal(0);
 });

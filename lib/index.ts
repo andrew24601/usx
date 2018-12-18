@@ -9,10 +9,9 @@ interface ElementData {
     unmounts: ((Element)=>void)[]
 }
 
-let inUpdateUI = false;
-
-export function createUIContext() {
+function createUIContext() {
     let elementMap = new Map<Element, ElementData>();
+    let inUpdateUI = false;
 
     function forEachUI(cb:(el:Element)=>void) {
         elementMap.forEach((map, el)=>{
@@ -177,20 +176,16 @@ export function createUIContext() {
             return null;
         }
     }
-    
-    return {
-        usx, updateUI, onUpdateUI, onUnmountUI, forEachUI, unmountUI
-    }
+    usx.create = createUIContext;
+    usx.update = updateUI;
+    usx.onUpdate = onUpdateUI;
+    usx.onUnmount = onUnmountUI;
+    usx.unmount = unmountUI;
+    usx.forEach = forEachUI;
+
+    return usx;
 }
 
-export const defaultContext = createUIContext();
-export const updateUI = defaultContext.updateUI;
-export const onUpdateUI = defaultContext.onUpdateUI;
-export const onUnmountUI = defaultContext.onUnmountUI;
-export const forEachUI = defaultContext.forEachUI;
-export const unmountUI = defaultContext.unmountUI;
-
-const usx = defaultContext.usx;
-
+const usx = createUIContext();
 export default usx;
 
