@@ -14,32 +14,41 @@ USX is a JSX compatible generator but for direct DOM generation instead of a vir
 
 ## Simple usage
 ~~~~
-Const x = <div class=“my-div”/>
+const x = <div class=“my-div”/>
 ~~~~
 
 Would result in x containing a reference to an HTMLDIVElement ready for insertion into the regular DOM.
 
 ~~~~
-Document.body.appendChild(x);
+document.body.appendChild(x);
 ~~~~
 
 ~~~~
-Const x = <div>This is a <b>Bold</b> message</div>;
+const x = <div>This is a <b>Bold</b> message</div>;
 ~~~~
 
 Similarly, variables can be substituted into the JSX as per normal
 
 ~~~~
-Const text = “World”;
+const text = “World”;
 
-Const x = <div>Hello {text}</div>
+const x = <div>Hello {text}</div>
 ~~~~
 
 Or:
 
 ~~~~
-Const items = [“one”, “two”, “three”];
-Const x = <ul>{items.map((t)=><li>{t}</li>)}</ul>;
+const items = [“one”, “two”, “three”];
+const x = <ul>{items.map(t=><li>{t}</li>)}</ul>;
+~~~~
+
+Usx can aso be used without a JSX environment.
+
+~~~~
+const x = usx("div", {class: "my-div"});
+const x = usx("div", null, "This is a ", usx("b", null, "Bold"), " message);
+const x = usx("div", null, "Hello " + text);
+const x = usx("ul", null, items.map(t=>usx("li", null, t)));
 ~~~~
 
 ## Event handlers
@@ -62,22 +71,22 @@ This also applies to custom events, so if you have a custom event “myevent”,
 
 ## Dynamic content
 
-USX supports dynamic content by passing functions in the places where values are accepted in combination with calling the updateUI function.
+USX supports dynamic content by passing functions in the places where values are accepted in combination with calling the usx.update function.
 
 ~~~~
-Const x = <div>Hello {()=>text}</div>
+const x = <div>Hello {()=>text}</div>
 ~~~~
 
-This will evaluate the function at point of creation of the element, and will also be automatically recalculated when the updateUI function is executed.
+This will evaluate the function at point of creation of the element, and will also be automatically recalculated when the usx.update function is executed.
 
 ~~~~
-Let text = “World”;
-Const x = <div>Hello {()=>text}</div>
-Text = “Pig Monkey”;
-updateUI();
+let text = “World”;
+const x = <div>Hello {()=>text}</div>
+text = “Pig Monkey”;
+usx.update();
 ~~~~
 
-Needing to remember to call updateUI would be irritating, so USX also automagically inserts an invocation to updateUI after any event handler inserted with USX.
+Needing to remember to call usx.update would be irritating, so USX also automagically inserts an invocation to usx.update after any event handler inserted with USX.
 
 So a complete example might be:
 
@@ -89,42 +98,42 @@ document.body.appendChild(example);
 
 ## Unmounting elements
 
-Adding a dynamic property to an element makes it easy to have dynamically updating elements without needing to remember to propagate changes from the model to your view. The only downside is that once a dynamic property is place then USX will keep on updating the DOM elements when updateUI is called.
+Adding a dynamic property to an element makes it easy to have dynamically updating elements without needing to remember to propagate changes from the model to your view. The only downside is that once a dynamic property is place then USX will keep on updating the DOM elements when usx.update is called.
 
 In simple circumstances this is fine, but for user interfaces were there is a lot of content that is being mounted and unmounted, there is a issue where USX will get slower it’s continuing to be updating content that has been long unmounted from the DOM.
 
-This is where the unmountUI function comes in.
+This is where the usx.unmount function comes in.
 
-Calling unmountUI on an element deregisters the dynamic property updating for the element and any of its child elements.
+Calling usx.unmount on an element deregisters the dynamic property updating for the element and any of its child elements.
 
-If you have more complex updating requirements than can’t be handled with a function on a single property, then the onUpdateUI function is a way to hook directly into the updateUI flow.
+If you have more complex updating requirements than can’t be handled with a function on a single property, then the usx.onUpdate function is a way to hook directly into the usx.update flow.
 
 ~~~~
-onUpdateUI(el, ()=>{
-…do stuff…
+usx.onUpdate(el, ()=>{
+    …do stuff…
 });
 ~~~~
 
-The callback passed to onUpdateUI will execute when updateUI is called. The first parameter is the element that the update is associated with – this is necessary to make sure the update function is removed when the associated element is unmounted from USX by calling unmountUI.
+The callback passed to usx.onUpdate will execute when usx.update is called. The first parameter is the element that the update is associated with – this is necessary to make sure the update function is removed when the associated element is unmounted from USX by calling usx.unmount.
 
 ## Introspection
 
-The forEachUI(callback) function allows the current set of dynamic elements to be introspected. This is useful primarily for debugging purposes to try and track down any leaks where elements are unintentionally still mounted.
+The usx.forEach(callback) function allows the current set of dynamic elements to be introspected. This is useful primarily for debugging purposes to try and track down any leaks where elements are unintentionally still mounted.
 
 ~~~~
 let mountCount = 0;
-forEachUI(e=>mountCount++);
+usx.forEach(e=>mountCount++);
 ~~~~
 
 ## Multiple Contexts
 
-The default functions all belong to a single USX context that updates all the mounted elements with a single call to updateUI.
+The default functions all belong to a single USX context that updates all the mounted elements with a single call to usx.update.
 
-If there are circumstances where this isn’t appropriate – for example there is a section of your UI where you want to be updating elements dynamically but separate from the rest of the elements. E.g. Dynamic updates for a drag and drop operation but you don’t want the updateUI to be evaluated for all the elements on the page.
+If there are circumstances where this isn’t appropriate – for example there is a section of your UI where you want to be updating elements dynamically but separate from the rest of the elements. E.g. Dynamic updates for a drag and drop operation but you don’t want the usx.update to be evaluated for all the elements on the page.
 
-The createUIContext() function creates an entirely isolated USX context - the function returns an object with the fields usx, updateUI, onUpdateUI, onUnmountUI, forEachUI, unmountUI - which correspond to the normal USX functions, but applying just to the context that has just been created.
+The usx.create() function creates an entirely isolated USX context - the function returns a new usx function with the same interface, but all the behaviour is isolated to the context that has just been created.
 
 ~~~~
-const newContext = createUIContext();
-const {usx, updateUI, onUpdateUI, onUnmountUI, forEachUI, unmountUI} = newContext;
+import usxfactory from 'usx';
+const usx = usxfactory.create();
 ~~~~
