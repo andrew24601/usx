@@ -12,6 +12,10 @@ function MyButton(props, children) {
     return usx('button', {class: 'my-button'}, children);
 }
 
+afterEach(()=>{
+    usx.clear();
+});
+
 describe('Simple usx test', ()=>{
     it('construct div', () => {
         const el = usx('div');
@@ -256,22 +260,44 @@ function contextCount(ctx) {
 }
 
 describe('introspect', ()=>{
-    expect(contextCount(usx)).to.equal(0);
+    it('test', ()=>{
+        expect(contextCount(usx)).to.equal(0);
 
-    const staticEl = usx("input", {type: "text"});
+        const staticEl = usx("input", {type: "text"});
 
-    expect(contextCount(usx)).to.equal(0);
+        expect(contextCount(usx)).to.equal(0);
 
-    let myId = "div1";
-    const el = usx('div', {class: 'my-div', id: ()=>myId});
+        let myId = "div1";
+        const el = usx('div', {class: 'my-div', id: ()=>myId});
 
-    expect(contextCount(usx)).to.equal(1);
+        expect(contextCount(usx)).to.equal(1);
 
-    count = 0;
-    usx.forEach(e=>count++);
-    expect(count).to.equal(1);
+        count = 0;
+        usx.forEach(e=>count++);
+        expect(count).to.equal(1);
 
-    usx.unmount(el);
+        usx.unmount(el);
 
-    expect(contextCount(usx)).to.equal(0);
+        expect(contextCount(usx)).to.equal(0);
+    })
 });
+
+describe('components', ()=>{
+    it('construct', ()=>{
+        const el = usx(MyButtonComponent, {caption: "Hello"});
+        expect(el).to.be.instanceOf(MyButtonComponent);
+    })
+
+    it('usage', ()=>{
+        const btn = usx(MyButtonComponent, {caption: "Hello"});
+        expect(btn).to.be.instanceOf(MyButtonComponent);
+        const el = usx("div", {__source: {fileName: 'test.js', lineNumber: 294}}, btn);
+        expect(el.firstChild).to.be.instanceOf(HTMLButtonElement);
+    })
+});
+
+class MyButtonComponent extends usxmodule.Component {
+    render(props, children) {
+        return usx("button", {}, props.caption);
+    }
+}

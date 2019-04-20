@@ -1,10 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-var matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
+exports.matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)?(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
 var matchSVGEl = /^(svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g)$/;
 var directAttribute = /^(value|checked)$/;
 var isEvent = /^on[A-Z]/;
 var SVGNS = "http://www.w3.org/2000/svg";
+var Component = /** @class */ (function () {
+    function Component(props, children) {
+        this.props = props;
+        this.children = children;
+    }
+    return Component;
+}());
+exports.Component = Component;
 function createUIContext() {
     var elementMap = new Map();
     var inUpdateUI = false;
@@ -55,6 +63,9 @@ function createUIContext() {
             unmountUI(c);
         }
     }
+    function clearUI() {
+        elementMap.clear();
+    }
     function dataForEl(el, create) {
         var ed = elementMap.get(el);
         if (ed == null && create) {
@@ -74,12 +85,14 @@ function createUIContext() {
         dataForEl(el, true).unmounts.push(callback);
     }
     function applyStyleProp(el, k, val) {
-        if (typeof val === "number" && matchPx.test(k))
+        if (typeof val === "number" && exports.matchPx.test(k))
             el.style[k] = val + "px";
         else
             el.style[k] = val;
     }
     function applyAttribute(el, k, val) {
+        if (k.startsWith("__"))
+            return;
         if (el.tagName === "INPUT" && directAttribute.test(k))
             el[k] = val;
         else if (val != null)
@@ -147,9 +160,12 @@ function createUIContext() {
         else if (c instanceof Array) {
             c.forEach(function (i) { return append(el, i, before); });
         }
+        else if (c instanceof Component) {
+            append(el, c._render, before);
+        }
         else if (needsApply(c)) {
-            var c1_1 = document.createComment("");
-            var c2_1 = document.createComment("");
+            var c1_1 = document.createTextNode("");
+            var c2_1 = document.createTextNode("");
             el.appendChild(c1_1);
             el.appendChild(c2_1);
             applyValue(el, c, function (v) { return applyContent(el, c1_1, c2_1, v); });
@@ -174,6 +190,11 @@ function createUIContext() {
             }
             return el_1;
         }
+        else if (typeof tag === "function" && tag.prototype instanceof Component) {
+            var instance = new tag(props, children);
+            instance._render = instance.render(props, children);
+            return instance;
+        }
         else if (typeof tag === 'function') {
             return tag(props, children);
         }
@@ -187,6 +208,7 @@ function createUIContext() {
     usx.onUnmount = onUnmountUI;
     usx.unmount = unmountUI;
     usx.forEach = forEachUI;
+    usx.clear = clearUI;
     return usx;
 }
 var usx = createUIContext();

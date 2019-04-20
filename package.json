@@ -1,8 +1,8 @@
 {
   "name": "usx",
-  "version": "1.0.17",
-  "description": "Minimal vanilla jsx",
-  "main": "./dist/index.js",
+  "version": "1.0.18",
+  "description": "Reactive vanilla jsx",
+  "main": "./distcjs/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

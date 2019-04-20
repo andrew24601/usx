@@ -1,4 +1,4 @@
-const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
+export const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)?(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
 var matchSVGEl = /^(svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g)$/;
 const directAttribute = /^(value|checked)$/;
 const isEvent = /^on[A-Z]/;
@@ -8,6 +8,23 @@ interface ElementData {
     updates: ((Element)=>void)[]
     unmounts: ((Element)=>void)[]
 }
+
+type USXElement = Node | string | Component<any> | Array<any>;
+
+interface ComponentFactory<T, U> {
+    new(props:T, children: USXElement[]):U;
+}
+
+export abstract class Component<T> {
+    _render: USXElement;
+
+    constructor(readonly props: T, readonly children: USXElement[]) {
+
+    }
+
+    abstract render(props: T, children: USXElement[]):USXElement;
+}
+
 
 function createUIContext() {
     let elementMap = new Map<Element, ElementData>();
@@ -58,6 +75,10 @@ function createUIContext() {
             unmountUI(c);
         }
     }
+
+    function clearUI() {
+        elementMap.clear();
+    }
     
     function dataForEl(el: Element, create: boolean) {
         let ed = elementMap.get(el);
@@ -87,7 +108,8 @@ function createUIContext() {
             el.style[k] = val;
     }
     
-    function applyAttribute(el, k, val) {
+    function applyAttribute(el, k:string, val) {
+        if (k.startsWith("__")) return;
         if (el.tagName === "INPUT" && directAttribute.test(k))
             el[k] = val;
         else if (val != null)
@@ -139,7 +161,7 @@ function createUIContext() {
         append(el, v, c2);
     }
     
-    function append(el, c, before:Node) {
+    function append(el:Element, c:USXElement, before:Node) {
         if (c == null) return;
         if (c instanceof Node) {
             if (before)
@@ -148,9 +170,11 @@ function createUIContext() {
                 el.appendChild(c);
         } else if (c instanceof Array) {
             c.forEach(i => append(el, i, before));
+        } else if (c instanceof Component) {
+            append(el, c._render, before);
         } else if (needsApply(c)) {
-            const c1 = document.createComment("");
-            const c2 = document.createComment("");
+            const c1 = document.createTextNode("");
+            const c2 = document.createTextNode("");
             el.appendChild(c1);
             el.appendChild(c2);
             applyValue(el, c, (v)=>applyContent(el, c1, c2, v));
@@ -160,8 +184,16 @@ function createUIContext() {
             el.appendChild(document.createTextNode("" + c));
         }
     }
-    
-    function usx(tag, props, ...children) {
+    function usx(tag:"div", props, ...children):HTMLDivElement;
+    function usx(tag:"span", props, ...children):HTMLSpanElement;
+    function usx(tag:"a", props, ...children):HTMLAnchorElement;
+    function usx(tag:"input", props, ...children):HTMLInputElement;
+    function usx(tag:"script", props, ...children):HTMLScriptElement;
+    function usx(tag:"select", props, ...children):HTMLSelectElement;
+    function usx(tag:"option", props, ...children):HTMLOptionElement;
+    function usx(tag:"form", props, ...children):HTMLFormElement;
+    function usx<T, U>(tag:ComponentFactory<T,U>, props: T, ...children):U;
+    function usx(tag, props, ...children):any {
         if (typeof tag === 'string') {
             const el = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
             append(el, children,null);
@@ -170,6 +202,10 @@ function createUIContext() {
             }
     
             return el;
+        } else if (typeof tag === "function" && tag.prototype instanceof Component) {
+            const instance = new tag(props, children);
+            instance._render = instance.render(props, children);
+            return instance;
         } else if (typeof tag === 'function') {
             return tag(props, children);
         } else {
@@ -182,10 +218,10 @@ function createUIContext() {
     usx.onUnmount = onUnmountUI;
     usx.unmount = unmountUI;
     usx.forEach = forEachUI;
+    usx.clear = clearUI;
 
     return usx;
 }
 
 const usx = createUIContext();
 export default usx;
-
