@@ -301,3 +301,68 @@ class MyButtonComponent extends usxmodule.Component {
         return usx("button", {}, props.caption);
     }
 }
+
+describe('custom event', ()=>{
+    it('test', ()=>{
+        const el = usx('div');
+        const el2 = usx('div', null, ()=>"hello");
+        let validateCalled = 0;
+        const data = {
+            called : false
+        }
+        usx.on(el, "validate", (payload)=>{
+            validateCalled++;
+            payload.called = true;
+        });
+        expect(validateCalled).to.eq(0);
+        usx.trigger("validate", data);
+        expect(validateCalled).to.eq(1);
+        expect(data.called).to.eq(true);
+        usx.update();
+    })
+});
+
+describe('custom style', ()=>{
+    it('create', ()=>{
+        const style = usx.style({
+            fontWeight: "bold"
+        }).withSubRule("a", {
+            textDecoration: "none"
+        }).withMediaQuery({maxWidth:1024}, {color: "red"})
+        .withMediaQuery({maxWidth:1024, orientation: "landscape"}, {color: "blue"});
+    });
+    it('test', ()=>{
+        let colour = "red";
+        const style = usx.style({
+            color: ()=>colour
+        });
+        colour = "blue";
+        usx.update();
+        colour = null;
+        usx.update();
+    })
+    it('apply as class', ()=>{
+        const style = usx.style({
+            color: "red"
+        });
+        const div = usx('div', {class: style});
+        expect(div.getAttribute('class')).to.eq(style.className);
+    });
+    it('apply as class array', ()=>{
+        const style = usx.style({
+            color: "red"
+        });
+        const div = usx('div', {class: [style, "block"]});
+        expect(div.getAttribute('class')).to.eq(style.className + " block");
+    });
+    it('direct test', ()=>{
+        let colour = "red";
+        const style = usx.style("body", {
+            color: ()=>colour
+        });
+        colour = "blue";
+        usx.update();
+        colour = null;
+        usx.update();
+    })
+});

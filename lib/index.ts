@@ -4,12 +4,15 @@ const directAttribute = /^(value|checked)$/;
 const isEvent = /^on[A-Z]/;
 const SVGNS = "http://www.w3.org/2000/svg";
 
+type ActionCallback = (...args)=>void;
+
 interface ElementData {
-    updates: ((Element)=>void)[]
-    unmounts: ((Element)=>void)[]
+    [index:string]: ActionCallback[];
 }
 
-type USXElement = Node | string | Component<any> | Array<any>;
+type USXStaticElement = Node | string | Component<any> | Array<any>;
+type USXDynamicElement = ()=>USXStaticElement;
+type USXElement = USXStaticElement | USXDynamicElement;
 
 interface ComponentFactory<T, U> {
     new(props:T, children: USXElement[]):U;
@@ -25,11 +28,91 @@ export abstract class Component<T> {
     abstract render(props: T, children: USXElement[]):USXElement;
 }
 
+class StylesheetClass {
+    private _pieces:string[] = [];
+    private _updates:ActionCallback[] = [];
+
+    constructor(readonly className: string, readonly clause: string, defn: StyleDefinition, private styleNode: Text) {
+        this._pieces.push(`${this.clause}{`);
+        this.compileDefinition(defn);
+        this._pieces.push("}");
+        this._update();
+    }
+
+    writeClause(idx: number, cssKey: string, k: string,val: string|number) {
+        if (val == null) {
+            this._pieces[idx] = "";
+        } else {
+            this._pieces[idx] = `${cssKey}:${formatStyleProp(k, val)}`;
+        }
+    }
+
+    compileClause(k: string, v: StyleValue) {
+        const cssKey = k.replace(/[A-Z]/g, v=>"-"+v.toLowerCase());
+        const idx = this._pieces.push("") - 1;
+        if (typeof v === "function") {
+            this._updates.push(()=>{
+                this.writeClause(idx, cssKey, k, v());
+            })
+        } else {
+            this.writeClause(idx, cssKey, k, v);
+        }
+    }
+
+    compileDefinition(defn: StyleDefinition) {
+        Object.keys(defn).forEach(k=>{
+            this.compileClause(k, defn[k]);
+            this._pieces.push(";");
+        })
+    }
+
+    withSubRule(clause: string, defn: StyleDefinition) {
+        this._pieces.push(`${this.clause} ${clause}{`);
+        this.compileDefinition(defn);
+        this._pieces.push("}");
+        this._update();
+        return this;
+    }
+
+    withMediaQuery(condition: StyleDefinition, defn: StyleDefinition) {
+        this._pieces.push(`@media `);
+        const keys = Object.keys(condition);
+        keys.forEach((k, idx)=>{
+            if (idx > 0)
+                this._pieces.push(" and ");
+            this._pieces.push("(");
+            this.compileClause(k, condition[k]);
+            this._pieces.push(")");
+        });
+        this._pieces.push(` {${this.clause} {`);
+        this.compileDefinition(defn);
+        this._pieces.push("}}");
+        this._update();
+        return this;
+    }
+
+    _update() {
+        this._updates.forEach(cb=>cb());
+        this.styleNode.textContent = this._pieces.join("");
+    }
+}
+
+type StyleValue = string|number|(()=>string)|(()=>number);
+type StyleDefinition = {[index:string]: StyleValue};
+
+function formatStyleProp(k: string, val: string|number) {
+    if (typeof val === "number" && matchPx.test(k))
+        return val + "px";
+    else
+        return val;
+}
+
+let styleSheet: HTMLStyleElement;
 
 function createUIContext() {
     let elementMap = new Map<Element, ElementData>();
     let inUpdateUI = false;
-
+    
     function forEachUI(cb:(el:Element)=>void) {
         elementMap.forEach((map, el)=>{
             cb(el);
@@ -43,9 +126,10 @@ function createUIContext() {
         inUpdateUI = true;
         try {
             elementMap.forEach((map, el)=>{
-                for (const cb of map.updates) {
-                    cb(el);
-                }
+                if (map.update)
+                    for (const cb of map.update) {
+                        cb(el);
+                    }
             });
         } finally {
             inUpdateUI = false;
@@ -62,11 +146,8 @@ function createUIContext() {
     
     function unmountUI(el: Element) {
         try {
-            const ed = dataForEl(el, false);
-            if (ed) {
-                for (const cb of ed.unmounts) {
-                    cb(el);
-                }
+            for (const cb of callbacksForEl(el, "unmount", false)) {
+                cb(el);
             }
         } finally {
             elementMap.delete(el);
@@ -80,40 +161,88 @@ function createUIContext() {
         elementMap.clear();
     }
     
-    function dataForEl(el: Element, create: boolean) {
+    function callbacksForEl(el: Element, action: string, create: boolean) {
         let ed = elementMap.get(el);
-        if (ed == null && create) {
-            ed = {
-                updates: [],
-                unmounts: []
-            };
-            elementMap.set(el, ed);
+        if (ed == null) {
+            if (!create) {
+                return [];
+            }
+            elementMap.set(el, ed = {});
         }
-        return ed;
+        let callbacks = ed[action];
+        if (callbacks == null) {
+            if (!create) {
+                return [];
+            }
+            callbacks = ed[action] = [];
+        }
+        return callbacks;        
     }
     
+    function on(el: Element, action: string, callback:(...args)=>void) {
+        callbacksForEl(el, action, true).push(callback);
+    }
+
+    function trigger(action: string, ...params) {
+        elementMap.forEach((map, el)=>{
+            if (map[action])
+                for (const cb of map[action]) {
+                    cb.apply(null, params);
+                }
+        });
+    }
+
+    function style(clause: string, styles: StyleDefinition):StylesheetClass;
+    function style(styles: StyleDefinition):StylesheetClass;
+    function style(a:string|StyleDefinition, b?:StyleDefinition):StylesheetClass {
+        const styleNode = document.createTextNode("");
+        const className = typeof a === "string" ? null : "c" + Math.random().toString(16).substring(2);
+        const clause = typeof a === "string" ? a : "." + className;
+        const styles = typeof a === "string" ? b : a;
+        const cls = new StylesheetClass(className, clause, styles, styleNode);
+
+        if (styleSheet == null) {
+            styleSheet = document.createElement("style");
+            document.head.appendChild(styleSheet);
+        }
+
+        styleSheet.appendChild(styleNode);
+
+        onUpdateUI(styleSheet, ()=>{
+            cls._update();
+        })
+
+        return cls;
+    }
+
     function onUpdateUI(el: Element, callback:(Element)=>void) {
-        dataForEl(el, true).updates.push(callback);
+        on(el, "update", callback);
         callback(el);
     }
     
     function onUnmountUI(el: Element, callback:(Element)=>void) {
-        dataForEl(el, true).unmounts.push(callback);
+        on(el, "unmount", callback);
     }
     
     function applyStyleProp(el, k, val) {
-        if (typeof val === "number" && matchPx.test(k))
-            el.style[k] = val + "px";
-        else
-            el.style[k] = val;
+        el.style[k] = formatStyleProp(k, val);
     }
     
+    function formatAttr(val) {
+        if (val instanceof Array) {
+            return val.filter(v=>v != null).map(k=>formatAttr(k)).join(" ");
+        } else if (val instanceof StylesheetClass)
+            return val.className;
+        else
+            return val;
+    } 
+
     function applyAttribute(el, k:string, val) {
         if (k.startsWith("__")) return;
         if (el.tagName === "INPUT" && directAttribute.test(k))
             el[k] = val;
         else if (val != null)
-            el.setAttribute(k, val);
+            el.setAttribute(k, formatAttr(val));
         else
             el.removeAttribute(k);
     }
@@ -219,6 +348,10 @@ function createUIContext() {
     usx.unmount = unmountUI;
     usx.forEach = forEachUI;
     usx.clear = clearUI;
+    usx.on = on;
+    usx.trigger = trigger;
+
+    usx.style = style;
 
     return usx;
 }

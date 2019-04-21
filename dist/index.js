@@ -11,6 +11,83 @@ var Component = /** @class */ (function () {
     return Component;
 }());
 export { Component };
+var StylesheetClass = /** @class */ (function () {
+    function StylesheetClass(className, clause, defn, styleNode) {
+        this.className = className;
+        this.clause = clause;
+        this.styleNode = styleNode;
+        this._pieces = [];
+        this._updates = [];
+        this._pieces.push(this.clause + "{");
+        this.compileDefinition(defn);
+        this._pieces.push("}");
+        this._update();
+    }
+    StylesheetClass.prototype.writeClause = function (idx, cssKey, k, val) {
+        if (val == null) {
+            this._pieces[idx] = "";
+        }
+        else {
+            this._pieces[idx] = cssKey + ":" + formatStyleProp(k, val);
+        }
+    };
+    StylesheetClass.prototype.compileClause = function (k, v) {
+        var _this = this;
+        var cssKey = k.replace(/[A-Z]/g, function (v) { return "-" + v.toLowerCase(); });
+        var idx = this._pieces.push("") - 1;
+        if (typeof v === "function") {
+            this._updates.push(function () {
+                _this.writeClause(idx, cssKey, k, v());
+            });
+        }
+        else {
+            this.writeClause(idx, cssKey, k, v);
+        }
+    };
+    StylesheetClass.prototype.compileDefinition = function (defn) {
+        var _this = this;
+        Object.keys(defn).forEach(function (k) {
+            _this.compileClause(k, defn[k]);
+            _this._pieces.push(";");
+        });
+    };
+    StylesheetClass.prototype.withSubRule = function (clause, defn) {
+        this._pieces.push(this.clause + " " + clause + "{");
+        this.compileDefinition(defn);
+        this._pieces.push("}");
+        this._update();
+        return this;
+    };
+    StylesheetClass.prototype.withMediaQuery = function (condition, defn) {
+        var _this = this;
+        this._pieces.push("@media ");
+        var keys = Object.keys(condition);
+        keys.forEach(function (k, idx) {
+            if (idx > 0)
+                _this._pieces.push(" and ");
+            _this._pieces.push("(");
+            _this.compileClause(k, condition[k]);
+            _this._pieces.push(")");
+        });
+        this._pieces.push(" {" + this.clause + " {");
+        this.compileDefinition(defn);
+        this._pieces.push("}}");
+        this._update();
+        return this;
+    };
+    StylesheetClass.prototype._update = function () {
+        this._updates.forEach(function (cb) { return cb(); });
+        this.styleNode.textContent = this._pieces.join("");
+    };
+    return StylesheetClass;
+}());
+function formatStyleProp(k, val) {
+    if (typeof val === "number" && matchPx.test(k))
+        return val + "px";
+    else
+        return val;
+}
+var styleSheet;
 function createUIContext() {
     var elementMap = new Map();
     var inUpdateUI = false;
@@ -26,10 +103,11 @@ function createUIContext() {
         inUpdateUI = true;
         try {
             elementMap.forEach(function (map, el) {
-                for (var _i = 0, _a = map.updates; _i < _a.length; _i++) {
-                    var cb = _a[_i];
-                    cb(el);
-                }
+                if (map.update)
+                    for (var _i = 0, _a = map.update; _i < _a.length; _i++) {
+                        var cb = _a[_i];
+                        cb(el);
+                    }
             });
         }
         finally {
@@ -46,12 +124,9 @@ function createUIContext() {
     }
     function unmountUI(el) {
         try {
-            var ed = dataForEl(el, false);
-            if (ed) {
-                for (var _i = 0, _a = ed.unmounts; _i < _a.length; _i++) {
-                    var cb = _a[_i];
-                    cb(el);
-                }
+            for (var _i = 0, _a = callbacksForEl(el, "unmount", false); _i < _a.length; _i++) {
+                var cb = _a[_i];
+                cb(el);
             }
         }
         finally {
@@ -64,29 +139,73 @@ function createUIContext() {
     function clearUI() {
         elementMap.clear();
     }
-    function dataForEl(el, create) {
+    function callbacksForEl(el, action, create) {
         var ed = elementMap.get(el);
-        if (ed == null && create) {
-            ed = {
-                updates: [],
-                unmounts: []
-            };
-            elementMap.set(el, ed);
+        if (ed == null) {
+            if (!create) {
+                return [];
+            }
+            elementMap.set(el, ed = {});
         }
-        return ed;
+        var callbacks = ed[action];
+        if (callbacks == null) {
+            if (!create) {
+                return [];
+            }
+            callbacks = ed[action] = [];
+        }
+        return callbacks;
+    }
+    function on(el, action, callback) {
+        callbacksForEl(el, action, true).push(callback);
+    }
+    function trigger(action) {
+        var params = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            params[_i - 1] = arguments[_i];
+        }
+        elementMap.forEach(function (map, el) {
+            if (map[action])
+                for (var _i = 0, _a = map[action]; _i < _a.length; _i++) {
+                    var cb = _a[_i];
+                    cb.apply(null, params);
+                }
+        });
+    }
+    function style(a, b) {
+        var styleNode = document.createTextNode("");
+        var className = typeof a === "string" ? null : "c" + Math.random().toString(16).substring(2);
+        var clause = typeof a === "string" ? a : "." + className;
+        var styles = typeof a === "string" ? b : a;
+        var cls = new StylesheetClass(className, clause, styles, styleNode);
+        if (styleSheet == null) {
+            styleSheet = document.createElement("style");
+            document.head.appendChild(styleSheet);
+        }
+        styleSheet.appendChild(styleNode);
+        onUpdateUI(styleSheet, function () {
+            cls._update();
+        });
+        return cls;
     }
     function onUpdateUI(el, callback) {
-        dataForEl(el, true).updates.push(callback);
+        on(el, "update", callback);
         callback(el);
     }
     function onUnmountUI(el, callback) {
-        dataForEl(el, true).unmounts.push(callback);
+        on(el, "unmount", callback);
     }
     function applyStyleProp(el, k, val) {
-        if (typeof val === "number" && matchPx.test(k))
-            el.style[k] = val + "px";
+        el.style[k] = formatStyleProp(k, val);
+    }
+    function formatAttr(val) {
+        if (val instanceof Array) {
+            return val.filter(function (v) { return v != null; }).map(function (k) { return formatAttr(k); }).join(" ");
+        }
+        else if (val instanceof StylesheetClass)
+            return val.className;
         else
-            el.style[k] = val;
+            return val;
     }
     function applyAttribute(el, k, val) {
         if (k.startsWith("__"))
@@ -94,7 +213,7 @@ function createUIContext() {
         if (el.tagName === "INPUT" && directAttribute.test(k))
             el[k] = val;
         else if (val != null)
-            el.setAttribute(k, val);
+            el.setAttribute(k, formatAttr(val));
         else
             el.removeAttribute(k);
     }
@@ -207,6 +326,9 @@ function createUIContext() {
     usx.unmount = unmountUI;
     usx.forEach = forEachUI;
     usx.clear = clearUI;
+    usx.on = on;
+    usx.trigger = trigger;
+    usx.style = style;
     return usx;
 }
 var usx = createUIContext();

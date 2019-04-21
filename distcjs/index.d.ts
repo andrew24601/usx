@@ -1,5 +1,7 @@
 export declare const matchPx: RegExp;
-declare type USXElement = Node | string | Component<any> | Array<any>;
+declare type USXStaticElement = Node | string | Component<any> | Array<any>;
+declare type USXDynamicElement = () => USXStaticElement;
+declare type USXElement = USXStaticElement | USXDynamicElement;
 interface ComponentFactory<T, U> {
     new (props: T, children: USXElement[]): U;
 }
@@ -10,6 +12,24 @@ export declare abstract class Component<T> {
     constructor(props: T, children: USXElement[]);
     abstract render(props: T, children: USXElement[]): USXElement;
 }
+declare class StylesheetClass {
+    readonly className: string;
+    readonly clause: string;
+    private styleNode;
+    private _pieces;
+    private _updates;
+    constructor(className: string, clause: string, defn: StyleDefinition, styleNode: Text);
+    writeClause(idx: number, cssKey: string, k: string, val: string | number): void;
+    compileClause(k: string, v: StyleValue): void;
+    compileDefinition(defn: StyleDefinition): void;
+    withSubRule(clause: string, defn: StyleDefinition): this;
+    withMediaQuery(condition: StyleDefinition, defn: StyleDefinition): this;
+    _update(): void;
+}
+declare type StyleValue = string | number | (() => string) | (() => number);
+declare type StyleDefinition = {
+    [index: string]: StyleValue;
+};
 declare function createUIContext(): {
     (tag: "div", props: any, ...children: any[]): HTMLDivElement;
     (tag: "span", props: any, ...children: any[]): HTMLSpanElement;
@@ -27,6 +47,12 @@ declare function createUIContext(): {
     unmount: (el: Element) => void;
     forEach: (cb: (el: Element) => void) => void;
     clear: () => void;
+    on: (el: Element, action: string, callback: (...args: any[]) => void) => void;
+    trigger: (action: string, ...params: any[]) => void;
+    style: {
+        (clause: string, styles: StyleDefinition): StylesheetClass;
+        (styles: StyleDefinition): StylesheetClass;
+    };
 };
 declare const usx: {
     (tag: "div", props: any, ...children: any[]): HTMLDivElement;
@@ -45,5 +71,11 @@ declare const usx: {
     unmount: (el: Element) => void;
     forEach: (cb: (el: Element) => void) => void;
     clear: () => void;
+    on: (el: Element, action: string, callback: (...args: any[]) => void) => void;
+    trigger: (action: string, ...params: any[]) => void;
+    style: {
+        (clause: string, styles: StyleDefinition): StylesheetClass;
+        (styles: StyleDefinition): StylesheetClass;
+    };
 };
 export default usx;

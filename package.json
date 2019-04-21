@@ -1,6 +1,6 @@
 {
   "name": "usx",
-  "version": "1.0.18",
+  "version": "1.0.20",
   "description": "Reactive vanilla jsx",
   "main": "./distcjs/index.js",
   "module": "./dist/index.js",
