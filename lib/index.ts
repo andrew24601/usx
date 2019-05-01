@@ -4,10 +4,12 @@ const directAttribute = /^(value|checked)$/;
 const isEvent = /^on[A-Z]/;
 const SVGNS = "http://www.w3.org/2000/svg";
 
-type ActionCallback = (...args)=>void;
+type ActionCallback = ()=>void;
 
 interface ElementData {
-    [index:string]: ActionCallback[];
+    context: UIUpdateContext,
+    update: ActionCallback[];
+    unmount: ActionCallback[];
 }
 
 type USXStaticElement = Node | string | Component<any> | Array<any>;
@@ -109,252 +111,362 @@ function formatStyleProp(k: string, val: string|number) {
 
 let styleSheet: HTMLStyleElement;
 
-function createUIContext() {
-    let elementMap = new Map<Element, ElementData>();
-    let inUpdateUI = false;
-    
-    function forEachUI(cb:(el:Element)=>void) {
-        elementMap.forEach((map, el)=>{
-            cb(el);
-        });
-    }
+export class UIUpdateContext {
+    _dirty = false;
 
-    function updateUI() {
-        if (inUpdateUI) {
-            return;
-        }
-        inUpdateUI = true;
-        try {
-            elementMap.forEach((map, el)=>{
-                if (map.update)
-                    for (const cb of map.update) {
-                        cb(el);
-                    }
-            });
-        } finally {
-            inUpdateUI = false;
-        }
+    dirty() {
+        this._dirty = true;
     }
-    
-    function action<T>(fn:()=>T):T {
-        try {
-            return fn();
-        } finally {
-            updateUI();
-        }
-    }
-    
-    function unmountUI(el: Element) {
-        try {
-            for (const cb of callbacksForEl(el, "unmount", false)) {
-                cb(el);
-            }
-        } finally {
-            elementMap.delete(el);
-        }
-        for (let c = el.firstElementChild; c; c = c.nextElementSibling) {
-            unmountUI(c);
-        }
-    }
-
-    function clearUI() {
-        elementMap.clear();
-    }
-    
-    function callbacksForEl(el: Element, action: string, create: boolean) {
-        let ed = elementMap.get(el);
-        if (ed == null) {
-            if (!create) {
-                return [];
-            }
-            elementMap.set(el, ed = {});
-        }
-        let callbacks = ed[action];
-        if (callbacks == null) {
-            if (!create) {
-                return [];
-            }
-            callbacks = ed[action] = [];
-        }
-        return callbacks;        
-    }
-    
-    function on(el: Element, action: string, callback:(...args)=>void) {
-        callbacksForEl(el, action, true).push(callback);
-    }
-
-    function trigger(action: string, ...params) {
-        elementMap.forEach((map, el)=>{
-            if (map[action])
-                for (const cb of map[action]) {
-                    cb.apply(null, params);
-                }
-        });
-    }
-
-    function style(clause: string, styles: StyleDefinition):StylesheetClass;
-    function style(styles: StyleDefinition):StylesheetClass;
-    function style(a:string|StyleDefinition, b?:StyleDefinition):StylesheetClass {
-        const styleNode = document.createTextNode("");
-        const className = typeof a === "string" ? null : "c" + Math.random().toString(16).substring(2);
-        const clause = typeof a === "string" ? a : "." + className;
-        const styles = typeof a === "string" ? b : a;
-        const cls = new StylesheetClass(className, clause, styles, styleNode);
-
-        if (styleSheet == null) {
-            styleSheet = document.createElement("style");
-            document.head.appendChild(styleSheet);
-        }
-
-        styleSheet.appendChild(styleNode);
-
-        onUpdateUI(styleSheet, ()=>{
-            cls._update();
-        })
-
-        return cls;
-    }
-
-    function onUpdateUI(el: Element, callback:(Element)=>void) {
-        on(el, "update", callback);
-        callback(el);
-    }
-    
-    function onUnmountUI(el: Element, callback:(Element)=>void) {
-        on(el, "unmount", callback);
-    }
-    
-    function applyStyleProp(el, k, val) {
-        el.style[k] = formatStyleProp(k, val);
-    }
-    
-    function formatAttr(val) {
-        if (val instanceof Array) {
-            return val.filter(v=>v != null).map(k=>formatAttr(k)).join(" ");
-        } else if (val instanceof StylesheetClass)
-            return val.className;
-        else
-            return val;
-    } 
-
-    function applyAttribute(el, k:string, val) {
-        if (k.startsWith("__")) return;
-        if (el.tagName === "INPUT" && directAttribute.test(k))
-            el[k] = val;
-        else if (val != null)
-            el.setAttribute(k, formatAttr(val));
-        else
-            el.removeAttribute(k);
-    }
-    
-    function needsApply(val) {
-        return (typeof val === 'function');
-    }
-    
-    function applyValue(el:Element, pval, callback) {
-        if (typeof pval === 'function') {
-            onUpdateUI(el, ()=>callback(pval()))
-        } else {
-            callback(pval);
-        }
-    }
-    
-    function setAttribute(el:HTMLElement|SVGElement, prop:string, val) {
-        if (val == null) {
-            return;
-        }
-        if (isEvent.test(prop)) {
-            if(typeof val === "function") {
-                el.addEventListener(prop.substr(2).toLowerCase(), function(...args) { return action(val.bind(this, ...args))})
-            }
-            /* develblock:start */
-            else
-                console.log("non-function event");
-            /* develblock:end */
-        } else if (prop === "style") {
-            if (typeof val === "object" && val != null) {
-                Object.keys(val).forEach(k=>{
-                    let stylePropVal = val[k];
-                    applyValue(el, stylePropVal, (v)=>applyStyleProp(el, k, v))
-                });
-            }
-        } else {
-            applyValue(el, val, (v)=>applyAttribute(el, prop, v));
-        }
-    }
-    
-    function applyContent(el, c1, c2, v) {
-        while (c1.nextSibling != c2) {
-            el.removeChild(c1.nextSibling);
-        }
-        append(el, v, c2);
-    }
-    
-    function append(el:Element, c:USXElement, before:Node) {
-        if (c == null) return;
-        if (c instanceof Node) {
-            if (before)
-                el.insertBefore(c, before);
-            else
-                el.appendChild(c);
-        } else if (c instanceof Array) {
-            c.forEach(i => append(el, i, before));
-        } else if (c instanceof Component) {
-            append(el, c._render, before);
-        } else if (needsApply(c)) {
-            const c1 = document.createTextNode("");
-            const c2 = document.createTextNode("");
-            el.appendChild(c1);
-            el.appendChild(c2);
-            applyValue(el, c, (v)=>applyContent(el, c1, c2, v));
-        } else if (before) {
-            el.insertBefore(document.createTextNode("" + c), before);
-        } else {
-            el.appendChild(document.createTextNode("" + c));
-        }
-    }
-    function usx(tag:"div", props, ...children):HTMLDivElement;
-    function usx(tag:"span", props, ...children):HTMLSpanElement;
-    function usx(tag:"a", props, ...children):HTMLAnchorElement;
-    function usx(tag:"input", props, ...children):HTMLInputElement;
-    function usx(tag:"script", props, ...children):HTMLScriptElement;
-    function usx(tag:"select", props, ...children):HTMLSelectElement;
-    function usx(tag:"option", props, ...children):HTMLOptionElement;
-    function usx(tag:"form", props, ...children):HTMLFormElement;
-    function usx<T, U>(tag:ComponentFactory<T,U>, props: T, ...children):U;
-    function usx(tag, props, ...children):any {
-        if (typeof tag === 'string') {
-            const el = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
-            append(el, children,null);
-            if (props != null) {
-                Object.keys(props).forEach(k => setAttribute(el, k, props[k]));
-            }
-    
-            return el;
-        } else if (typeof tag === "function" && tag.prototype instanceof Component) {
-            const instance = new tag(props, children);
-            instance._render = instance.render(props, children);
-            return instance;
-        } else if (typeof tag === 'function') {
-            return tag(props, children);
-        } else {
-            return null;
-        }
-    }
-    usx.create = createUIContext;
-    usx.update = updateUI;
-    usx.onUpdate = onUpdateUI;
-    usx.onUnmount = onUnmountUI;
-    usx.unmount = unmountUI;
-    usx.forEach = forEachUI;
-    usx.clear = clearUI;
-    usx.on = on;
-    usx.trigger = trigger;
-
-    usx.style = style;
-
-    return usx;
 }
 
-const usx = createUIContext();
+let elementMap = new Map<Element, ElementData>();
+let inUpdateUI = false;
+
+function updateUI() {
+    if (inUpdateUI) {
+        return;
+    }
+    inUpdateUI = true;
+    try {
+        const contextMap = new Map<UIUpdateContext, boolean>();
+        elementMap.forEach(map=>{
+            if (map.context) {
+                const context = map.context;
+                if (!context._dirty)
+                    return;
+                contextMap.set(context, true);
+            }
+            for (const cb of map.update) {
+                cb();
+            }
+        });
+        contextMap.forEach((_, context)=>{
+            context._dirty = false;
+        })
+    } finally {
+        inUpdateUI = false;
+    }
+}
+
+function action<T>(fn:()=>T):T {
+    try {
+        return fn();
+    } finally {
+        updateUI();
+    }
+}
+
+function unmountUI(el: Element) {
+    try {
+        let ed = elementMap.get(el);
+        if (ed)
+            for (const cb of ed.unmount) {
+                cb();
+            }
+    } finally {
+        elementMap.delete(el);
+    }
+    for (let c = el.firstElementChild; c; c = c.nextElementSibling) {
+        unmountUI(c);
+    }
+}
+
+function clearUI() {
+    elementMap.clear();
+}
+
+function dataForEl(el: Element):ElementData {
+    let ed = elementMap.get(el);
+    if (ed == null) {
+        elementMap.set(el, ed = {
+            context: getContext<{context: UIUpdateContext}>().context,
+            update: [],
+            unmount: []
+        });
+    }
+    return ed;
+}
+
+export function usxStyle(clause: string, styles: StyleDefinition):StylesheetClass;
+export function usxStyle(styles: StyleDefinition):StylesheetClass;
+export function usxStyle(a:string|StyleDefinition, b?:StyleDefinition):StylesheetClass {
+    const styleNode = document.createTextNode("");
+    const className = typeof a === "string" ? null : "c" + Math.random().toString(16).substring(2);
+    const clause = typeof a === "string" ? a : "." + className;
+    const styles = typeof a === "string" ? b : a;
+    const cls = new StylesheetClass(className, clause, styles, styleNode);
+
+    if (styleSheet == null) {
+        styleSheet = document.createElement("style");
+        document.head.appendChild(styleSheet);
+    }
+
+    styleSheet.appendChild(styleNode);
+
+    onUpdateUI(styleSheet, ()=>{
+        cls._update();
+    })
+
+    return cls;
+}
+
+function onUpdateUI(el: Element, callback:()=>void) {
+    dataForEl(el).update.push(callback);
+    callback();
+}
+
+function onUnmountUI(el: Element, callback:()=>void) {
+    dataForEl(el).unmount.push(callback);
+}
+
+function applyStyleProp(el, k, val) {
+    el.style[k] = formatStyleProp(k, val);
+}
+
+function formatAttr(val) {
+    if (val instanceof Array) {
+        return val.filter(v=>v != null).map(k=>formatAttr(k)).join(" ");
+    } else if (val instanceof StylesheetClass)
+        return val.className;
+    else
+        return val;
+} 
+
+function applyAttribute(el, k:string, val) {
+    if (k.startsWith("__")) return;
+    if (el.tagName === "INPUT" && directAttribute.test(k))
+        el[k] = val;
+    else if (val != null)
+        el.setAttribute(k, formatAttr(val));
+    else
+        el.removeAttribute(k);
+}
+
+function needsApply(val) {
+    return (typeof val === 'function');
+}
+
+function applyValue(el:Element, pval, callback) {
+    if (typeof pval === 'function') {
+        onUpdateUI(el, ()=>callback(pval()))
+    } else {
+        callback(pval);
+    }
+}
+
+function setAttribute(el:HTMLElement|SVGElement, prop:string, val) {
+    if (val == null) {
+        return;
+    }
+    if (isEvent.test(prop)) {
+        if(typeof val === "function") {
+            el.addEventListener(prop.substr(2).toLowerCase(), function(...args) { return action(val.bind(this, ...args))})
+        }
+        /* develblock:start */
+        else
+            console.log("non-function event");
+        /* develblock:end */
+    } else if (prop === "style") {
+        if (typeof val === "object" && val != null) {
+            Object.keys(val).forEach(k=>{
+                let stylePropVal = val[k];
+                applyValue(el, stylePropVal, (v)=>applyStyleProp(el, k, v))
+            });
+        }
+    } else {
+        applyValue(el, val, (v)=>applyAttribute(el, prop, v));
+    }
+}
+
+function applyContent(el, c1, c2, v) {
+    while (c1.nextSibling != c2) {
+        el.removeChild(c1.nextSibling);
+    }
+    append(el, v, c2);
+}
+
+function propsWithContext(props) {
+    const mergedProps = {};
+    for (const k in currentContext) {
+        mergedProps[k] = currentContext[k];
+    }
+    for (const k in props) {
+        mergedProps[k] = props[k];
+    }
+    return mergedProps;
+}
+
+function append(el:Element, c:USXElement, before:Node) {
+    if (c == null) return;
+    if (c instanceof Node) {
+        if (before)
+            el.insertBefore(c, before);
+        else
+            el.appendChild(c);
+    } else if (c instanceof Array) {
+        c.forEach(i => append(el, i, before));
+    } else if (c instanceof Component) {
+        append(el, c._render, before);
+    } else if (needsApply(c)) {
+        const c1 = document.createTextNode("");
+        const c2 = document.createTextNode("");
+        el.appendChild(c1);
+        el.appendChild(c2);
+        applyValue(el, c, (v)=>applyContent(el, c1, c2, v));
+    } else if (before) {
+        el.insertBefore(document.createTextNode("" + c), before);
+    } else {
+        el.appendChild(document.createTextNode("" + c));
+    }
+}
+function usx(tag:"div", props, ...children):HTMLDivElement;
+function usx(tag:"span", props, ...children):HTMLSpanElement;
+function usx(tag:"a", props, ...children):HTMLAnchorElement;
+function usx(tag:"input", props, ...children):HTMLInputElement;
+function usx(tag:"script", props, ...children):HTMLScriptElement;
+function usx(tag:"select", props, ...children):HTMLSelectElement;
+function usx(tag:"option", props, ...children):HTMLOptionElement;
+function usx(tag:"form", props, ...children):HTMLFormElement;
+function usx<T, U>(tag:ComponentFactory<T,U>, props: T, ...children):U;
+function usx(tag, props, ...children):any {
+    if (typeof tag === 'string') {
+        const el = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
+        append(el, children,null);
+        if (props != null) {
+            Object.keys(props).forEach(k => setAttribute(el, k, props[k]));
+        }
+
+        return el;
+    } else if (typeof tag === "function" && tag.prototype instanceof Component) {
+        const mergeProps = propsWithContext(props);
+        const instance = new tag(mergeProps, children);
+        instance._render = instance.render(mergeProps, children);
+        return instance;
+    } else if (typeof tag === 'function') {
+        return tag(propsWithContext(props), children);
+    } else {
+        return null;
+    }
+}
+usx.update = updateUI;
+usx.onUpdate = onUpdateUI;
+usx.onUnmount = onUnmountUI;
+usx.unmount = unmountUI;
+usx.clear = clearUI;
+
 export default usx;
+
+let currentContext:any = {};
+
+export function getContext<T>() {
+    return currentContext as T;
+}
+
+export function withContext(newContext: object, callback:()=>void) {
+    let savedContext = currentContext;
+    try {
+        currentContext = {};
+        for (const k in savedContext) {
+            currentContext[k] = savedContext[k];
+        }
+        for (const k in newContext) {
+            currentContext[k] = newContext[k];
+        }
+        callback();
+    } finally {
+        currentContext = savedContext;
+    }
+}
+
+interface StoreProps<T> {
+    name: string;
+    initialState:T;
+    uiContexts?:UIUpdateContext[];
+    onReset?:()=>void;
+}
+
+export class Store<T> {
+    state:T
+    devTools
+    devToolsUnsubscribe
+    
+    constructor(readonly props: StoreProps<T>) {
+        this.state = props.initialState;
+
+        if (window["__REDUX_DEVTOOLS_EXTENSION__"]) {
+            const serialInit = JSON.stringify(this.toJS(this.state));
+            this.devTools = window["__REDUX_DEVTOOLS_EXTENSION__"].connect({
+                name: props.name,
+                features: {
+                    persist: true, // persist states on page reloading
+                    export: true, // export history of actions in a file
+                    import: 'custom', // import history of actions from a file
+                    jump: true, // jump back and forth (time travelling)
+                    skip: false
+                }
+            });
+            this.devTools.init(this.toJS(this.state));
+            this.devToolsUnsubscribe = this.devTools.subscribe(message=>{
+                if (message.type === "DISPATCH") {
+                    switch (message.payload.type) {
+                        case "RESET":
+                            this._resetState(this.fromJS(JSON.parse(serialInit)));
+                            this.devTools.init(this.toJS(this.state));
+                            break;
+                        case "COMMIT":
+                            this.devTools.init(this.toJS(this.state));
+                            break;
+                        case "ROLLBACK":
+                            this._resetState(this.fromJS(JSON.parse(message.state)));
+                            this.devTools.init(this.toJS(this.state));
+                            break;
+                        case "JUMP_TO_STATE":
+                        case "JUMP_TO_ACTION":
+                            this._resetState(this.fromJS(JSON.parse(message.state)));
+                            break;
+                        case 'IMPORT_STATE': {
+                            const { nextLiftedState } = message.payload;
+                            const { computedStates } = nextLiftedState;
+                            this._resetState(this.fromJS(computedStates[computedStates.length - 1].state));
+                            this.devTools.send(null, nextLiftedState);
+                            return;
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    _dispatch(action:string) {
+        if (this.devTools)
+        this.devTools.send(action, this.toJS(this.state));
+        if (this.props.uiContexts) {
+            for (const ctx of this.props.uiContexts)
+                ctx.dirty();
+        }
+    }
+
+    _resetState(newState: T) {
+        this.state = newState;
+        if (this.props.onReset)
+            this.props.onReset();
+        usx.update();
+    }
+
+    toJS(state: T) {
+        return state;
+    }
+
+    fromJS(json):T {
+        return json;
+    }
+
+    close() {
+        if (this.devToolsUnsubscribe) {
+            this.devToolsUnsubscribe();
+            delete this.devTools;
+            delete this.devToolsUnsubscribe;
+        }
+    }
+
+}
