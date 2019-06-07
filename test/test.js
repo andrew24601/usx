@@ -1,12 +1,10 @@
 require('jsdom-global')()
-const { expect, assert } = require('chai');
+const { expect } = require('chai');
 const usxmodule = require('../distcjs/index');
 
 const usx = usxmodule.default;
 const updateUI = usx.update;
 const onUpdateUI = usx.onUpdate;
-const usxStyle = usxmodule.usxStyle;
-const UIUpdateContext = usxmodule.UIUpdateContext;
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -214,6 +212,31 @@ describe('Evaluated content', ()=>{
     })
 });
 
+describe('Multi context', ()=>{
+    it('single context', ()=>{
+        const ctx = usx.create();
+        let myId = "div1";
+        const el = ctx('div', {class: 'my-div', id: ()=>myId});
+        expect(el.className).to.equal('my-div');
+        expect(el.id).to.equal('div1');
+        myId = "div2";
+        ctx.update();
+        expect(el.id).to.equal('div2');
+    });
+    it('single context is separate from default', ()=>{
+        const ctx = usx.create();
+        let myId = "div1";
+        const el = ctx('div', {class: 'my-div', id: ()=>myId});
+        expect(el.className).to.equal('my-div');
+        expect(el.id).to.equal('div1');
+        myId = "div2";
+        updateUI();
+        expect(el.id).to.equal('div1');
+        ctx.update();
+        expect(el.id).to.equal('div2');
+    });
+})
+
 describe('nested updateUI', ()=>{
     it ('nest', ()=>{
         let invokeCount = 0;
@@ -227,6 +250,35 @@ describe('nested updateUI', ()=>{
         expect(invokeCount).to.equal(2);
         updateUI();
         expect(invokeCount).to.equal(3);
+    })
+});
+
+function contextCount(ctx) {
+    let count = 0;
+    ctx.forEach(e=>count++);
+    return count;
+}
+
+describe('introspect', ()=>{
+    it('test', ()=>{
+        expect(contextCount(usx)).to.equal(0);
+
+        const staticEl = usx("input", {type: "text"});
+
+        expect(contextCount(usx)).to.equal(0);
+
+        let myId = "div1";
+        const el = usx('div', {class: 'my-div', id: ()=>myId});
+
+        expect(contextCount(usx)).to.equal(1);
+
+        count = 0;
+        usx.forEach(e=>count++);
+        expect(count).to.equal(1);
+
+        usx.unmount(el);
+
+        expect(contextCount(usx)).to.equal(0);
     })
 });
 
@@ -250,9 +302,29 @@ class MyButtonComponent extends usxmodule.Component {
     }
 }
 
+describe('custom event', ()=>{
+    it('test', ()=>{
+        const el = usx('div');
+        const el2 = usx('div', null, ()=>"hello");
+        let validateCalled = 0;
+        const data = {
+            called : false
+        }
+        usx.on(el, "validate", (payload)=>{
+            validateCalled++;
+            payload.called = true;
+        });
+        expect(validateCalled).to.eq(0);
+        usx.trigger("validate", data);
+        expect(validateCalled).to.eq(1);
+        expect(data.called).to.eq(true);
+        usx.update();
+    })
+});
+
 describe('custom style', ()=>{
     it('create', ()=>{
-        const style = usxStyle({
+        const style = usx.style({
             fontWeight: "bold"
         }).withSubRule("a", {
             textDecoration: "none"
@@ -261,7 +333,7 @@ describe('custom style', ()=>{
     });
     it('test', ()=>{
         let colour = "red";
-        const style = usxStyle({
+        const style = usx.style({
             color: ()=>colour
         });
         colour = "blue";
@@ -270,14 +342,14 @@ describe('custom style', ()=>{
         usx.update();
     })
     it('apply as class', ()=>{
-        const style = usxStyle({
+        const style = usx.style({
             color: "red"
         });
         const div = usx('div', {class: style});
         expect(div.getAttribute('class')).to.eq(style.className);
     });
     it('apply as class array', ()=>{
-        const style = usxStyle({
+        const style = usx.style({
             color: "red"
         });
         const div = usx('div', {class: [style, "block"]});
@@ -285,7 +357,7 @@ describe('custom style', ()=>{
     });
     it('direct test', ()=>{
         let colour = "red";
-        const style = usxStyle("body", {
+        const style = usx.style("body", {
             color: ()=>colour
         });
         colour = "blue";
@@ -294,224 +366,3 @@ describe('custom style', ()=>{
         usx.update();
     })
 });
-
-function DivWithContext(props) {
-    return usx('div', null, props.count);
-}
-
-describe('Context test', ()=>{
-    it('set context', ()=>{
-        let invoked = false;
-        let captureCount;
-        usxmodule.withContext({count: 3}, ()=>{
-            invoked = true;
-            captureCount = usxmodule.getContext().count;
-        });
-        expect(invoked).to.be.eq(true);
-        expect(captureCount).to.be.eq(3);
-    });
-
-    it('nested context', ()=>{
-        let invoked = false;
-        let captureCount, subCaptureCount;
-        let capturePants;
-        usxmodule.withContext({count: 3}, ()=>{
-            invoked = true;
-            captureCount = usxmodule.getContext().count;
-            usxmodule.withContext({count: 5, pants: "green"}, ()=>{
-                subCaptureCount = usxmodule.getContext().count;
-                capturePants = usxmodule.getContext().pants;
-            });
-        });
-        expect(invoked).to.be.eq(true);
-        expect(captureCount).to.be.eq(3);
-        expect(subCaptureCount).to.be.eq(5);
-        expect(capturePants).to.be.eq("green");
-    });
-
-    it('applied context', ()=>{
-        usxmodule.withContext({count: 3}, ()=>{
-            el = usx(DivWithContext);
-        });
-        expect(el.textContent).to.be.eq('3');
-    })
-
-});
-
-describe('UI context test', ()=>{
-    it('create context', ()=>{
-        ctx = new UIUpdateContext();
-    })
-    it('mount context', ()=>{
-        let el;
-        let myId = "div1";
-        ctx = new UIUpdateContext();
-
-        usxmodule.withContext({context: ctx}, ()=>{
-            el = usx('div', {class: 'my-div', id: ()=>myId});
-        });
-
-        expect(el.className).to.equal('my-div');
-        expect(el.id).to.equal('div1');
-        myId = "div2";
-        updateUI();
-        expect(el.id).to.equal('div1');
-        ctx.dirty();
-        updateUI();
-        expect(el.id).to.equal('div2');
-        myId = "div3";
-        updateUI();
-        expect(el.id).to.equal('div2');
-        ctx.dirty();
-        updateUI();
-        expect(el.id).to.equal('div3');
-    })
-})
-
-class Counter extends usxmodule.Store {
-    inc() {
-        this.state.counter++;
-        this._dispatch('inc');
-    }
-}
-
-describe('store test', ()=>{
-    it('counter test', ()=>{
-        const c = new Counter({
-            initialState: {
-                counter: 1
-            }
-        });
-
-        expect(c.state.counter).to.equal(1);
-        c.inc();
-        expect(c.state.counter).to.equal(2);
-
-        c.close();
-    })
-
-    it('counter ui context test', ()=>{
-        const ctx = new UIUpdateContext();
-        const c = new Counter({
-            initialState: {
-                counter: 1
-            },
-            uiContexts: [ctx]
-        });
-
-        expect(c.state.counter).to.equal(1);
-        expect(ctx._dirty).to.eq(false);
-        c.inc();
-        expect(c.state.counter).to.equal(2);
-        expect(ctx._dirty).to.eq(true);
-    })
-
-    it('test devtools', ()=>{
-        let devcallback;
-        window["__REDUX_DEVTOOLS_EXTENSION__"] = {
-            connect() {
-                return {
-                    init() {
-
-                    },
-                    subscribe(callback) {
-                        devcallback = callback;
-                        return ()=>{
-
-                        }
-                    },
-                    send() {
-
-                    }
-                }
-            }
-        }
-        let c = new Counter({
-            initialState: {
-                counter: 1
-            }
-        });
-        assert(devcallback);
-
-        c.inc();
-        c.inc();
-        expect(c.state.counter).to.equal(3);
-
-        devcallback({
-            type: "DISPATCH",
-            payload: {
-                type: "RESET"
-            }
-        })
-
-        expect(c.state.counter).to.equal(1);
-
-        devcallback({
-            type: "DISPATCH",
-            payload: {
-                type: "JUMP_TO_STATE"
-            },
-            state: `{"counter":54}`
-        })
-        expect(c.state.counter).to.equal(54);
-
-        devcallback({
-            type: "DISPATCH",
-            payload: {
-                type: "COMMIT"
-            }
-        })
-
-        devcallback({
-            type: "DISPATCH",
-            payload: {
-                type: "ROLLBACK"
-            },
-            state: `{"counter":5}`
-        })
-        expect(c.state.counter).to.equal(5);
-
-        devcallback({
-            type: "DISPATCH",
-            payload: {
-                type: "IMPORT_STATE",
-                nextLiftedState: {
-                    computedStates: [
-                        {
-                            state: {
-                                counter: 78
-                            }
-                        }
-                    ]
-                }
-            }
-        })
-        expect(c.state.counter).to.equal(78);
-
-        devcallback({
-            type: "DUMMY"
-        })
-
-        c.close();
-
-        let resetCount = 0;
-        c = new Counter({
-            initialState: {
-                counter: 1
-            },
-            onReset() {
-                resetCount++;
-            }
-        });
-
-        devcallback({
-            type: "DISPATCH",
-            payload: {
-                type: "RESET"
-            }
-        })
-
-        expect(resetCount).to.equal(1);
-
-    })
-})
