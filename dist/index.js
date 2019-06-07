@@ -88,7 +88,7 @@ function formatStyleProp(k, val) {
         return val;
 }
 var styleSheet;
-function createUIContext() {
+function createIsolatedContext() {
     var elementMap = new Map();
     var inUpdateUI = false;
     function forEachUI(cb) {
@@ -265,6 +265,16 @@ function createUIContext() {
         }
         append(el, v, c2);
     }
+    function propsWithContext(props) {
+        var mergedProps = {};
+        for (var k in activeProps) {
+            mergedProps[k] = activeProps[k];
+        }
+        for (var k in props) {
+            mergedProps[k] = props[k];
+        }
+        return mergedProps;
+    }
     function append(el, c, before) {
         if (c == null)
             return;
@@ -308,18 +318,19 @@ function createUIContext() {
             return el_1;
         }
         else if (typeof tag === "function" && tag.prototype instanceof Component) {
-            var instance = new tag(props, children);
-            instance._render = instance.render(props, children);
+            var mergeProps = propsWithContext(props);
+            var instance = new tag(mergeProps, children);
+            instance._render = instance.render(mergeProps, children);
             return instance;
         }
         else if (typeof tag === 'function') {
-            return tag(props, children);
+            return tag(propsWithContext(props), children);
         }
         else {
             return null;
         }
     }
-    usx.create = createUIContext;
+    usx.create = createIsolatedContext;
     usx.update = updateUI;
     usx.onUpdate = onUpdateUI;
     usx.onUnmount = onUnmountUI;
@@ -331,5 +342,25 @@ function createUIContext() {
     usx.style = style;
     return usx;
 }
-var usx = createUIContext();
+var usx = createIsolatedContext();
 export default usx;
+var activeProps = {};
+export function getActiveProps() {
+    return activeProps;
+}
+export function withProps(newProps, callback) {
+    var savedContext = activeProps;
+    try {
+        activeProps = {};
+        for (var k in savedContext) {
+            activeProps[k] = savedContext[k];
+        }
+        for (var k in newProps) {
+            activeProps[k] = newProps[k];
+        }
+        callback();
+    }
+    finally {
+        activeProps = savedContext;
+    }
+}

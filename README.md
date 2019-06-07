@@ -137,3 +137,92 @@ The usx.create() function creates an entirely isolated USX context - the functio
 import usxfactory from 'usx';
 const usx = usxfactory.create();
 ~~~~
+
+## Components
+
+USX supports two types of components, function components and class components.
+
+### Function Components
+
+A function component looks like:
+
+~~~~
+interface HeaderProps {
+    text: string;
+    title: string;
+}
+
+function Header({text, title}: HeaderProps) {
+    return <h1 title={title}>{text}</h1>;
+}
+~~~~
+
+and would be used like:
+~~~~
+<div>
+    <Header text="Introduction" title="Introduction Header"/>
+~~~~
+
+Generally, function components are passed the properties as the first parameter, and any child elements are passed in
+an array as the second parameter.
+
+### Class Components
+
+Function components are suitable for the majority of components, but there are often cases where you want to create
+a component that can otherwise be inspected/manipulated through other code.
+
+An example of a class component is:
+
+~~~~
+interface MyComponentProps {
+    count: number
+}
+
+class MyComponent extends Component<MyComponentProps> {
+    myDivs: HTMLDivElement[] = [];
+
+    render({count}: MyComponentProps) {
+        for (let idx = 0; idx < count; idx++) {
+            this.myDivs.push(<div>{idx}</div>);
+        }
+        return this.myDivs;
+    }
+
+    getItem(idx: number) {
+        return this.myDivs[idx];
+    }
+}
+~~~~
+
+And could be used as
+
+~~~~
+const component:MyComponent = <MyComponent count={5}/>;
+<div>
+    {component}
+</div>
+~~~~
+
+The difference from a function component, is that a reference to a MyComponent instance is retained which can
+be used to access any properties/methods on the component.
+
+## Pushing properties
+
+A common use case is wanting to inject common properties into a number of components - someimes nested deep within other components - and it's a pain to need to inject these properties manually.
+
+Examples of these use cases include things such as theming objects, or references to stores/controllers, etc.
+
+In USX you use the withProps function that injects those properties into all the child components.
+
+~~~~
+return withProps({
+    store: myStore,
+    theme: myTheme
+}, ()=><div><MyComponent/><MyOtherComponent theme={otherTheme}/></div>);
+~~~~
+
+All components that are created during the callback will have store and theme automatically added to their properties (unless they have been explicitly overridden). This includes both MyComponent and MyOtherComponent, as well as any other components that they create during the callback. Note that this only applies to components and not direct DOM elements created with USX.
+
+If a component creates child components outside of the render cycle, it can capture the current active props that have been established with the getActiveProps method - and then apply them using withProps as appropriate.
+
+Using withProps can also be nested, leading to a merged set of properties, with the inner properties overriding any common keys.

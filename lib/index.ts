@@ -109,7 +109,7 @@ function formatStyleProp(k: string, val: string|number) {
 
 let styleSheet: HTMLStyleElement;
 
-function createUIContext() {
+function createIsolatedContext() {
     let elementMap = new Map<Element, ElementData>();
     let inUpdateUI = false;
     
@@ -290,6 +290,17 @@ function createUIContext() {
         append(el, v, c2);
     }
     
+    function propsWithContext(props) {
+        const mergedProps = {};
+        for (const k in activeProps) {
+            mergedProps[k] = activeProps[k];
+        }
+        for (const k in props) {
+            mergedProps[k] = props[k];
+        }
+        return mergedProps;
+    }
+    
     function append(el:Element, c:USXElement, before:Node) {
         if (c == null) return;
         if (c instanceof Node) {
@@ -332,16 +343,17 @@ function createUIContext() {
     
             return el;
         } else if (typeof tag === "function" && tag.prototype instanceof Component) {
-            const instance = new tag(props, children);
-            instance._render = instance.render(props, children);
+            const mergeProps = propsWithContext(props);
+            const instance = new tag(mergeProps, children);
+            instance._render = instance.render(mergeProps, children);
             return instance;
         } else if (typeof tag === 'function') {
-            return tag(props, children);
+            return tag(propsWithContext(props), children);
         } else {
             return null;
         }
     }
-    usx.create = createUIContext;
+    usx.create = createIsolatedContext;
     usx.update = updateUI;
     usx.onUpdate = onUpdateUI;
     usx.onUnmount = onUnmountUI;
@@ -356,5 +368,27 @@ function createUIContext() {
     return usx;
 }
 
-const usx = createUIContext();
+const usx = createIsolatedContext();
 export default usx;
+
+let activeProps:any = {};
+
+export function getActiveProps<T>() {
+    return activeProps as T;
+}
+
+export function withProps(newProps: object, callback:()=>void) {
+    let savedContext = activeProps;
+    try {
+        activeProps = {};
+        for (const k in savedContext) {
+            activeProps[k] = savedContext[k];
+        }
+        for (const k in newProps) {
+            activeProps[k] = newProps[k];
+        }
+        callback();
+    } finally {
+        activeProps = savedContext;
+    }
+}

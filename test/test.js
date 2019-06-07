@@ -366,3 +366,46 @@ describe('custom style', ()=>{
         usx.update();
     })
 });
+
+function DivWithContext(props) {
+    return usx('div', null, props.count);
+}
+
+describe('Context test', ()=>{
+    it('set context', ()=>{
+        let invoked = false;
+        let captureCount;
+        usxmodule.withProps({count: 3}, ()=>{
+            invoked = true;
+            captureCount = usxmodule.getActiveProps().count;
+        });
+        expect(invoked).to.be.eq(true);
+        expect(captureCount).to.be.eq(3);
+    });
+
+    it('nested context', ()=>{
+        let invoked = false;
+        let captureCount, subCaptureCount;
+        let capturePants;
+        usxmodule.withProps({count: 3}, ()=>{
+            invoked = true;
+            captureCount = usxmodule.getActiveProps().count;
+            usxmodule.withProps({count: 5, pants: "green"}, ()=>{
+                subCaptureCount = usxmodule.getActiveProps().count;
+                capturePants = usxmodule.getActiveProps().pants;
+            });
+        });
+        expect(invoked).to.be.eq(true);
+        expect(captureCount).to.be.eq(3);
+        expect(subCaptureCount).to.be.eq(5);
+        expect(capturePants).to.be.eq("green");
+    });
+
+    it('applied context', ()=>{
+        usxmodule.withProps({count: 3}, ()=>{
+            el = usx(DivWithContext);
+        });
+        expect(el.textContent).to.be.eq('3');
+    })
+
+});

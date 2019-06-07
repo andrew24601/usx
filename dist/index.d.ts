@@ -30,7 +30,7 @@ declare type StyleValue = string | number | (() => string) | (() => number);
 declare type StyleDefinition = {
     [index: string]: StyleValue;
 };
-declare function createUIContext(): {
+declare function createIsolatedContext(): {
     (tag: "div", props: any, ...children: any[]): HTMLDivElement;
     (tag: "span", props: any, ...children: any[]): HTMLSpanElement;
     (tag: "a", props: any, ...children: any[]): HTMLAnchorElement;
@@ -40,7 +40,7 @@ declare function createUIContext(): {
     (tag: "option", props: any, ...children: any[]): HTMLOptionElement;
     (tag: "form", props: any, ...children: any[]): HTMLFormElement;
     <T, U>(tag: ComponentFactory<T, U>, props: T, ...children: any[]): U;
-    create: typeof createUIContext;
+    create: typeof createIsolatedContext;
     update: () => void;
     onUpdate: (el: Element, callback: (Element: any) => void) => void;
     onUnmount: (el: Element, callback: (Element: any) => void) => void;
@@ -64,7 +64,7 @@ declare const usx: {
     (tag: "option", props: any, ...children: any[]): HTMLOptionElement;
     (tag: "form", props: any, ...children: any[]): HTMLFormElement;
     <T, U>(tag: ComponentFactory<T, U>, props: T, ...children: any[]): U;
-    create: typeof createUIContext;
+    create: typeof createIsolatedContext;
     update: () => void;
     onUpdate: (el: Element, callback: (Element: any) => void) => void;
     onUnmount: (el: Element, callback: (Element: any) => void) => void;
@@ -79,3 +79,5 @@ declare const usx: {
     };
 };
 export default usx;
+export declare function getActiveProps<T>(): T;
+export declare function withProps(newProps: object, callback: () => void): void;
