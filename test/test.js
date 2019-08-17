@@ -13,7 +13,7 @@ function MyButton(props, children) {
 }
 
 afterEach(()=>{
-    usx.clear();
+    usx.unmountAll();
 });
 
 describe('Simple usx test', ()=>{
@@ -209,7 +209,24 @@ describe('Evaluated content', ()=>{
         updateUI();
         expect(el.id).to.equal('div1');
         expect(wasUnmounted).to.equal(true);
-    })
+    });
+    it('unmount all', ()=>{
+        let myId = "div1";
+        const el = usx('div', {class: 'my-div', id: ()=>myId});
+        const root = usx("div", {class: 'my-div', name: "fred"}, el)
+        expect(el.className).to.equal('my-div');
+        expect(el.id).to.equal('div1');
+
+        let wasUnmounted = false;
+        usx.onUnmount(el, ()=>{
+            wasUnmounted = true;
+        })
+
+        usx.unmountAll();
+
+        expect(wasUnmounted).to.equal(true);
+    });
+
 });
 
 describe('Multi context', ()=>{
@@ -302,29 +319,9 @@ class MyButtonComponent extends usxmodule.Component {
     }
 }
 
-describe('custom event', ()=>{
-    it('test', ()=>{
-        const el = usx('div');
-        const el2 = usx('div', null, ()=>"hello");
-        let validateCalled = 0;
-        const data = {
-            called : false
-        }
-        usx.on(el, "validate", (payload)=>{
-            validateCalled++;
-            payload.called = true;
-        });
-        expect(validateCalled).to.eq(0);
-        usx.trigger("validate", data);
-        expect(validateCalled).to.eq(1);
-        expect(data.called).to.eq(true);
-        usx.update();
-    })
-});
-
 describe('custom style', ()=>{
     it('create', ()=>{
-        const style = usx.style({
+        const style = usx.cssClass({
             fontWeight: "bold"
         }).withSubRule("a", {
             textDecoration: "none"
@@ -333,7 +330,7 @@ describe('custom style', ()=>{
     });
     it('test', ()=>{
         let colour = "red";
-        const style = usx.style({
+        const style = usx.cssClass({
             color: ()=>colour
         });
         colour = "blue";
@@ -342,14 +339,14 @@ describe('custom style', ()=>{
         usx.update();
     })
     it('apply as class', ()=>{
-        const style = usx.style({
+        const style = usx.cssClass({
             color: "red"
         });
         const div = usx('div', {class: style});
         expect(div.getAttribute('class')).to.eq(style.className);
     });
     it('apply as class array', ()=>{
-        const style = usx.style({
+        const style = usx.cssClass({
             color: "red"
         });
         const div = usx('div', {class: [style, "block"]});
@@ -357,7 +354,7 @@ describe('custom style', ()=>{
     });
     it('direct test', ()=>{
         let colour = "red";
-        const style = usx.style("body", {
+        const style = usx.cssClass("body", {
             color: ()=>colour
         });
         colour = "blue";
@@ -375,9 +372,9 @@ describe('Context test', ()=>{
     it('set context', ()=>{
         let invoked = false;
         let captureCount;
-        usxmodule.withProps({count: 3}, ()=>{
+        usxmodule.withDefaultProps({count: 3}, ()=>{
             invoked = true;
-            captureCount = usxmodule.getActiveProps().count;
+            captureCount = usxmodule.getDefaultProps().count;
         });
         expect(invoked).to.be.eq(true);
         expect(captureCount).to.be.eq(3);
@@ -387,12 +384,12 @@ describe('Context test', ()=>{
         let invoked = false;
         let captureCount, subCaptureCount;
         let capturePants;
-        usxmodule.withProps({count: 3}, ()=>{
+        usxmodule.withDefaultProps({count: 3}, ()=>{
             invoked = true;
-            captureCount = usxmodule.getActiveProps().count;
-            usxmodule.withProps({count: 5, pants: "green"}, ()=>{
-                subCaptureCount = usxmodule.getActiveProps().count;
-                capturePants = usxmodule.getActiveProps().pants;
+            captureCount = usxmodule.getDefaultProps().count;
+            usxmodule.withDefaultProps({count: 5, pants: "green"}, ()=>{
+                subCaptureCount = usxmodule.getDefaultProps().count;
+                capturePants = usxmodule.getDefaultProps().pants;
             });
         });
         expect(invoked).to.be.eq(true);
@@ -402,7 +399,7 @@ describe('Context test', ()=>{
     });
 
     it('applied context', ()=>{
-        usxmodule.withProps({count: 3}, ()=>{
+        usxmodule.withDefaultProps({count: 3}, ()=>{
             el = usx(DivWithContext);
         });
         expect(el.textContent).to.be.eq('3');

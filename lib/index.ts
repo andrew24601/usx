@@ -7,7 +7,8 @@ const SVGNS = "http://www.w3.org/2000/svg";
 type ActionCallback = (...args)=>void;
 
 interface ElementData {
-    [index:string]: ActionCallback[];
+    update: ActionCallback[];
+    unmount?: ActionCallback[];
 }
 
 type USXStaticElement = Node | string | Component<any> | Array<any>;
@@ -126,10 +127,9 @@ function createIsolatedContext() {
         inUpdateUI = true;
         try {
             elementMap.forEach((map, el)=>{
-                if (map.update)
-                    for (const cb of map.update) {
-                        cb(el);
-                    }
+                for (const cb of map.update) {
+                    cb(el);
+                }
             });
         } finally {
             inUpdateUI = false;
@@ -157,7 +157,13 @@ function createIsolatedContext() {
         }
     }
 
-    function clearUI() {
+    function unmountAll() {
+        elementMap.forEach((map, el)=>{
+            if (map.unmount)
+                for (const cb of map.unmount) {
+                    cb(el);
+                }
+        });
         elementMap.clear();
     }
     
@@ -167,7 +173,9 @@ function createIsolatedContext() {
             if (!create) {
                 return [];
             }
-            elementMap.set(el, ed = {});
+            elementMap.set(el, ed = {
+                update:[]
+            });
         }
         let callbacks = ed[action];
         if (callbacks == null) {
@@ -183,18 +191,9 @@ function createIsolatedContext() {
         callbacksForEl(el, action, true).push(callback);
     }
 
-    function trigger(action: string, ...params) {
-        elementMap.forEach((map, el)=>{
-            if (map[action])
-                for (const cb of map[action]) {
-                    cb.apply(null, params);
-                }
-        });
-    }
-
-    function style(clause: string, styles: StyleDefinition):StylesheetClass;
-    function style(styles: StyleDefinition):StylesheetClass;
-    function style(a:string|StyleDefinition, b?:StyleDefinition):StylesheetClass {
+    function cssClass(clause: string, styles: StyleDefinition):StylesheetClass;
+    function cssClass(styles: StyleDefinition):StylesheetClass;
+    function cssClass(a:string|StyleDefinition, b?:StyleDefinition):StylesheetClass {
         const styleNode = document.createTextNode("");
         const className = typeof a === "string" ? null : "c" + Math.random().toString(16).substring(2);
         const clause = typeof a === "string" ? a : "." + className;
@@ -292,8 +291,8 @@ function createIsolatedContext() {
     
     function propsWithContext(props) {
         const mergedProps = {};
-        for (const k in activeProps) {
-            mergedProps[k] = activeProps[k];
+        for (const k in defaultProps) {
+            mergedProps[k] = defaultProps[k];
         }
         for (const k in props) {
             mergedProps[k] = props[k];
@@ -359,11 +358,9 @@ function createIsolatedContext() {
     usx.onUnmount = onUnmountUI;
     usx.unmount = unmountUI;
     usx.forEach = forEachUI;
-    usx.clear = clearUI;
-    usx.on = on;
-    usx.trigger = trigger;
+    usx.unmountAll = unmountAll;
 
-    usx.style = style;
+    usx.cssClass = cssClass;
 
     return usx;
 }
@@ -371,24 +368,24 @@ function createIsolatedContext() {
 const usx = createIsolatedContext();
 export default usx;
 
-let activeProps:any = {};
+let defaultProps:any = {};
 
-export function getActiveProps<T>() {
-    return activeProps as T;
+export function getDefaultProps<T>() {
+    return defaultProps as T;
 }
 
-export function withProps(newProps: object, callback:()=>void) {
-    let savedContext = activeProps;
+export function withDefaultProps(newProps: object, callback:()=>void) {
+    let savedContext = defaultProps;
     try {
-        activeProps = {};
+        defaultProps = {};
         for (const k in savedContext) {
-            activeProps[k] = savedContext[k];
+            defaultProps[k] = savedContext[k];
         }
         for (const k in newProps) {
-            activeProps[k] = newProps[k];
+            defaultProps[k] = newProps[k];
         }
         callback();
     } finally {
-        activeProps = savedContext;
+        defaultProps = savedContext;
     }
 }

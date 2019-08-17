@@ -46,10 +46,8 @@ declare function createIsolatedContext(): {
     onUnmount: (el: Element, callback: (Element: any) => void) => void;
     unmount: (el: Element) => void;
     forEach: (cb: (el: Element) => void) => void;
-    clear: () => void;
-    on: (el: Element, action: string, callback: (...args: any[]) => void) => void;
-    trigger: (action: string, ...params: any[]) => void;
-    style: {
+    unmountAll: () => void;
+    cssClass: {
         (clause: string, styles: StyleDefinition): StylesheetClass;
         (styles: StyleDefinition): StylesheetClass;
     };
@@ -70,14 +68,12 @@ declare const usx: {
     onUnmount: (el: Element, callback: (Element: any) => void) => void;
     unmount: (el: Element) => void;
     forEach: (cb: (el: Element) => void) => void;
-    clear: () => void;
-    on: (el: Element, action: string, callback: (...args: any[]) => void) => void;
-    trigger: (action: string, ...params: any[]) => void;
-    style: {
+    unmountAll: () => void;
+    cssClass: {
         (clause: string, styles: StyleDefinition): StylesheetClass;
         (styles: StyleDefinition): StylesheetClass;
     };
 };
 export default usx;
-export declare function getActiveProps<T>(): T;
-export declare function withProps(newProps: object, callback: () => void): void;
+export declare function getDefaultProps<T>(): T;
+export declare function withDefaultProps(newProps: object, callback: () => void): void;

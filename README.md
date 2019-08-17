@@ -206,16 +206,16 @@ const component:MyComponent = <MyComponent count={5}/>;
 The difference from a function component, is that a reference to a MyComponent instance is retained which can
 be used to access any properties/methods on the component.
 
-## Pushing properties
+## Injecting properties
 
 A common use case is wanting to inject common properties into a number of components - someimes nested deep within other components - and it's a pain to need to inject these properties manually.
 
 Examples of these use cases include things such as theming objects, or references to stores/controllers, etc.
 
-In USX you use the withProps function that injects those properties into all the child components.
+In USX you use the withDefaultProps function that injects those properties into all the child components.
 
 ~~~~
-return withProps({
+return withDefaultProps({
     store: myStore,
     theme: myTheme
 }, ()=><div><MyComponent/><MyOtherComponent theme={otherTheme}/></div>);
@@ -223,6 +223,44 @@ return withProps({
 
 All components that are created during the callback will have store and theme automatically added to their properties (unless they have been explicitly overridden). This includes both MyComponent and MyOtherComponent, as well as any other components that they create during the callback. Note that this only applies to components and not direct DOM elements created with USX.
 
-If a component creates child components outside of the render cycle, it can capture the current active props that have been established with the getActiveProps method - and then apply them using withProps as appropriate.
+If a component creates child components outside of the render cycle, it can capture the current active props that have been established with the getActiveProps method - and then apply them using withDefaultProps as appropriate.
 
-Using withProps can also be nested, leading to a merged set of properties, with the inner properties overriding any common keys.
+Using withDefaultProps can also be nested, leading to a merged set of properties, with the inner properties overriding any common keys.
+
+## Dynamic CSS styles
+
+Certain CSS effects can't be easily performed by reactive style properties.
+
+For example, hover effects are easily performed by CSS but require code and tracking event listeners, state, etc.
+
+USX allows the creation of reactive CSS classes using the cssClass function. It can either define classes with a set class name or can dynamically generate a class name to avoid collisions with any existing class names.
+
+The two forms of cssClass are:
+
+~~~~
+let currentThemeColour = "red";
+
+usx.cssClass("theme-class", {
+    color: ()=>currentThemeColour
+});
+
+const div1 = <div class="theme-class">Hello</div>;
+
+const myThemeClass = usx.cssClass({
+    color: ()=>currentThemeColour
+});
+
+const div2 = <div class={myThemeClass}>Hello</div>;
+~~~~
+
+Once a CSS class has been defined, it can also be refined with the withSubRule and withMediaQuery functions.
+
+~~~~
+const myThemeClass = usx.cssClass({
+    color: ()=>currentThemeColour
+}).withMediaQuery({maxWidth: 1024}, {
+    backgroundColor: "green"
+}).withSubRule("a", {
+    color: "inherit"
+});
+~~~~

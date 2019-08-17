@@ -105,11 +105,10 @@ function createIsolatedContext() {
         inUpdateUI = true;
         try {
             elementMap.forEach(function (map, el) {
-                if (map.update)
-                    for (var _i = 0, _a = map.update; _i < _a.length; _i++) {
-                        var cb = _a[_i];
-                        cb(el);
-                    }
+                for (var _i = 0, _a = map.update; _i < _a.length; _i++) {
+                    var cb = _a[_i];
+                    cb(el);
+                }
             });
         }
         finally {
@@ -138,7 +137,14 @@ function createIsolatedContext() {
             unmountUI(c);
         }
     }
-    function clearUI() {
+    function unmountAll() {
+        elementMap.forEach(function (map, el) {
+            if (map.unmount)
+                for (var _i = 0, _a = map.unmount; _i < _a.length; _i++) {
+                    var cb = _a[_i];
+                    cb(el);
+                }
+        });
         elementMap.clear();
     }
     function callbacksForEl(el, action, create) {
@@ -147,7 +153,9 @@ function createIsolatedContext() {
             if (!create) {
                 return [];
             }
-            elementMap.set(el, ed = {});
+            elementMap.set(el, ed = {
+                update: []
+            });
         }
         var callbacks = ed[action];
         if (callbacks == null) {
@@ -161,20 +169,7 @@ function createIsolatedContext() {
     function on(el, action, callback) {
         callbacksForEl(el, action, true).push(callback);
     }
-    function trigger(action) {
-        var params = [];
-        for (var _i = 1; _i < arguments.length; _i++) {
-            params[_i - 1] = arguments[_i];
-        }
-        elementMap.forEach(function (map, el) {
-            if (map[action])
-                for (var _i = 0, _a = map[action]; _i < _a.length; _i++) {
-                    var cb = _a[_i];
-                    cb.apply(null, params);
-                }
-        });
-    }
-    function style(a, b) {
+    function cssClass(a, b) {
         var styleNode = document.createTextNode("");
         var className = typeof a === "string" ? null : "c" + Math.random().toString(16).substring(2);
         var clause = typeof a === "string" ? a : "." + className;
@@ -269,8 +264,8 @@ function createIsolatedContext() {
     }
     function propsWithContext(props) {
         var mergedProps = {};
-        for (var k in activeProps) {
-            mergedProps[k] = activeProps[k];
+        for (var k in defaultProps) {
+            mergedProps[k] = defaultProps[k];
         }
         for (var k in props) {
             mergedProps[k] = props[k];
@@ -338,33 +333,31 @@ function createIsolatedContext() {
     usx.onUnmount = onUnmountUI;
     usx.unmount = unmountUI;
     usx.forEach = forEachUI;
-    usx.clear = clearUI;
-    usx.on = on;
-    usx.trigger = trigger;
-    usx.style = style;
+    usx.unmountAll = unmountAll;
+    usx.cssClass = cssClass;
     return usx;
 }
 var usx = createIsolatedContext();
 exports.default = usx;
-var activeProps = {};
-function getActiveProps() {
-    return activeProps;
+var defaultProps = {};
+function getDefaultProps() {
+    return defaultProps;
 }
-exports.getActiveProps = getActiveProps;
-function withProps(newProps, callback) {
-    var savedContext = activeProps;
+exports.getDefaultProps = getDefaultProps;
+function withDefaultProps(newProps, callback) {
+    var savedContext = defaultProps;
     try {
-        activeProps = {};
+        defaultProps = {};
         for (var k in savedContext) {
-            activeProps[k] = savedContext[k];
+            defaultProps[k] = savedContext[k];
         }
         for (var k in newProps) {
-            activeProps[k] = newProps[k];
+            defaultProps[k] = newProps[k];
         }
         callback();
     }
     finally {
-        activeProps = savedContext;
+        defaultProps = savedContext;
     }
 }
-exports.withProps = withProps;
+exports.withDefaultProps = withDefaultProps;
