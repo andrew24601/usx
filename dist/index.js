@@ -1,5 +1,9 @@
+const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)?(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
 const svgns = "http://www.w3.org/2000/svg";
 export class USXComponent {
+    constructor(props) {
+        this.props = props;
+    }
 }
 function createContext() {
     let defaultProps = {};
@@ -35,7 +39,7 @@ function createContext() {
             el[name] = value;
         else if (name === "__source")
             el.setAttribute("__source", value.fileName + ":" + value.lineNumber);
-        else if (name !== "__self") {
+        else {
             if (value != null)
                 el.setAttribute(name, value);
             else
@@ -45,12 +49,12 @@ function createContext() {
     function setStyle(el, value) {
         for (const k in value) {
             const applyValue = (v) => {
-                if (v != null) {
+                if (typeof v === "number" && matchPx.test(k))
+                    el.style[k] = v + "px";
+                else if (v == null)
+                    el.style[k] = "";
+                else
                     el.style[k] = v;
-                }
-                else {
-                    el.style.removeProperty(k);
-                }
             };
             const v = value[k];
             if (typeof v === "function") {
@@ -66,7 +70,7 @@ function createContext() {
         if (typeof factory !== 'string') {
             if (factory.prototype instanceof USXComponent) {
                 const component = new factory(combinedProps);
-                component._render = component.render(combinedProps);
+                component._render = component.render(combinedProps, children);
                 return component;
             }
             else

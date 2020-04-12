@@ -10,7 +10,9 @@ const svgns = "http://www.w3.org/2000/svg";
 export abstract class USXComponent<T> {
     _render?: USXChild;
 
-    abstract render(props: T):USXChild;
+    constructor(readonly props: T) {}
+
+    abstract render(props: T, children:USXChild[]):USXChild;
 }
 
 function createContext() {
@@ -79,7 +81,7 @@ function createContext() {
         if (typeof factory !== 'string') {
             if (factory.prototype instanceof USXComponent) {
                 const component = new (factory as USXClassFactory<any>)(combinedProps);
-                component._render = component.render(combinedProps);
+                component._render = component.render(combinedProps, children);
                 return component;
             } else
                 return (factory as USXFunctionFactory)(combinedProps, children);
