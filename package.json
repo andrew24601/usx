@@ -1,13 +1,12 @@
 {
   "name": "usx",
-  "version": "1.0.23",
+  "version": "2.0.0",
   "description": "Reactive vanilla jsx",
-  "main": "./distcjs/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "node package.js",
-    "test": "nyc --reporter=html --reporter=text mocha",
+    "build": "tsc",
+    "test": "nyc --reporter=html --reporter=text mocha test/**/*.ts",
     "coverage": "nyc report --reporter=text-lcov | coveralls"
   },
   "repository": {
@@ -30,10 +29,27 @@
     "mocha": "^5.2.0",
     "mocha-lcov-reporter": "^1.3.0",
     "nyc": "^12.0.2",
-    "typescript": "^3.5.1"
+    "ts-node": "^8.8.1",
+    "typescript": "^3.8.3"
   },
   "files": [
-    "dist",
-    "distcjs"
-  ]
+    "dist"
+  ],
+  "nyc": {
+    "include": [
+      "lib/**/*.ts"
+    ],
+    "extension": [
+      ".ts"
+    ],
+    "require": [
+      "ts-node/register"
+    ],
+    "reporter": [
+      "text-summary",
+      "html"
+    ],
+    "sourceMap": true,
+    "instrument": true
+  }
 }

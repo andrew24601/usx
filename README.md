@@ -45,10 +45,10 @@ const x = <ul>{items.map(t=><li>{t}</li>)}</ul>;
 Usx can aso be used without a JSX environment.
 
 ~~~~
-const x = usx("div", {class: "my-div"});
-const x = usx("div", null, "This is a ", usx("b", null, "Bold"), " message);
-const x = usx("div", null, "Hello " + text);
-const x = usx("ul", null, items.map(t=>usx("li", null, t)));
+const x = usx.el("div", {class: "my-div"});
+const x = us.el("div", null, "This is a ", usx("b", null, "Bold"), " message);
+const x = us.el("div", null, "Hello " + text);
+const x = us.el("ul", null, items.map(t=>usx("li", null, t)));
 ~~~~
 
 ## Event handlers
@@ -74,14 +74,14 @@ This also applies to custom events, so if you have a custom event “myevent”,
 USX supports dynamic content by passing functions in the places where values are accepted in combination with calling the usx.update function.
 
 ~~~~
-const x = <div>Hello {()=>text}</div>
+const x = <div>Hello <span textContent={()=>text}/></div>
 ~~~~
 
 This will evaluate the function at point of creation of the element, and will also be automatically recalculated when the usx.update function is executed.
 
 ~~~~
 let text = “World”;
-const x = <div>Hello {()=>text}</div>
+const x = <div>Hello <span textContent={()=>text}/></div>
 text = “Pig Monkey”;
 usx.update();
 ~~~~
@@ -92,7 +92,7 @@ So a complete example might be:
 
 ~~~~
 let count = 0;
-const example = <div>You clicked {()=>count} times <button onClick={()=>count++}>Click</button></div>;
+const example = <div>You clicked <span textContent={()=>count}/> times <button onClick={()=>count++}>Click</button></div>;
 document.body.appendChild(example);
 ~~~~
 
@@ -102,28 +102,19 @@ Adding a dynamic property to an element makes it easy to have dynamically updati
 
 In simple circumstances this is fine, but for user interfaces were there is a lot of content that is being mounted and unmounted, there is a issue where USX will get slower it’s continuing to be updating content that has been long unmounted from the DOM.
 
-This is where the usx.unmount function comes in.
+This is where the usx.remove function comes in.
 
-Calling usx.unmount on an element deregisters the dynamic property updating for the element and any of its child elements.
+Calling usx.remove on an element deregisters the dynamic property updating for the element and any of its child elements.
 
-If you have more complex updating requirements than can’t be handled with a function on a single property, then the usx.onUpdate function is a way to hook directly into the usx.update flow.
+If you have more complex updating requirements than can’t be handled with a function on a single property, then the usx.onRemove function is a way to hook directly into the usx.update flow.
 
 ~~~~
-usx.onUpdate(el, ()=>{
+usx.onRemove(el, ()=>{
     …do stuff…
 });
 ~~~~
 
-The callback passed to usx.onUpdate will execute when usx.update is called. The first parameter is the element that the update is associated with – this is necessary to make sure the update function is removed when the associated element is unmounted from USX by calling usx.unmount.
-
-## Introspection
-
-The usx.forEach(callback) function allows the current set of dynamic elements to be introspected. This is useful primarily for debugging purposes to try and track down any leaks where elements are unintentionally still mounted.
-
-~~~~
-let mountCount = 0;
-usx.forEach(e=>mountCount++);
-~~~~
+The callback passed to usx.onUpdate will execute when usx.update is called. The first parameter is the element that the update is associated with – this is necessary to make sure the update function is removed when the associated element is unmounted from USX by calling usx.remove.
 
 ## Multiple Contexts
 
@@ -131,11 +122,11 @@ The default functions all belong to a single USX context that updates all the mo
 
 If there are circumstances where this isn’t appropriate – for example there is a section of your UI where you want to be updating elements dynamically but separate from the rest of the elements. E.g. Dynamic updates for a drag and drop operation but you don’t want the usx.update to be evaluated for all the elements on the page.
 
-The usx.create() function creates an entirely isolated USX context - the function returns a new usx function with the same interface, but all the behaviour is isolated to the context that has just been created.
+The usx.createContext() function creates an entirely isolated USX context - the function returns a new usx function with the same interface, but all the behaviour is isolated to the context that has just been created.
 
 ~~~~
-import usxfactory from 'usx';
-const usx = usxfactory.create();
+import {usx} from 'usx';
+const context = usx.createContext();
 ~~~~
 
 ## Components
@@ -178,7 +169,7 @@ interface MyComponentProps {
     count: number
 }
 
-class MyComponent extends Component<MyComponentProps> {
+class MyComponent extends USXComponent<MyComponentProps> {
     myDivs: HTMLDivElement[] = [];
 
     render({count}: MyComponentProps) {
@@ -227,40 +218,3 @@ If a component creates child components outside of the render cycle, it can capt
 
 Using withDefaultProps can also be nested, leading to a merged set of properties, with the inner properties overriding any common keys.
 
-## Dynamic CSS styles
-
-Certain CSS effects can't be easily performed by reactive style properties.
-
-For example, hover effects are easily performed by CSS but require code and tracking event listeners, state, etc.
-
-USX allows the creation of reactive CSS classes using the cssClass function. It can either define classes with a set class name or can dynamically generate a class name to avoid collisions with any existing class names.
-
-The two forms of cssClass are:
-
-~~~~
-let currentThemeColour = "red";
-
-usx.cssClass("theme-class", {
-    color: ()=>currentThemeColour
-});
-
-const div1 = <div class="theme-class">Hello</div>;
-
-const myThemeClass = usx.cssClass({
-    color: ()=>currentThemeColour
-});
-
-const div2 = <div class={myThemeClass}>Hello</div>;
-~~~~
-
-Once a CSS class has been defined, it can also be refined with the withSubRule and withMediaQuery functions.
-
-~~~~
-const myThemeClass = usx.cssClass({
-    color: ()=>currentThemeColour
-}).withMediaQuery({maxWidth: 1024}, {
-    backgroundColor: "green"
-}).withSubRule("a", {
-    color: "inherit"
-});
-~~~~

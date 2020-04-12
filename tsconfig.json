@@ -1,10 +1,9 @@
 {
   "compilerOptions": {
     /* Basic Options */
-    "target": "es5", 
-    "module": "es6",
+    "target": "es6", 
     "declaration": true,
-     "outDir": "./dist",
+    "outDir": "./dist",
     "moduleResolution": "node",
     "lib": [
       "dom",

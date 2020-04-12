@@ -1,359 +1,202 @@
-export var matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)?(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
-var matchSVGEl = /^(svg|line|circle|rect|ellipse|path|image|poly(gon|line)|text(Path)?|g)$/;
-var directAttribute = /^(value|checked)$/;
-var isEvent = /^on[A-Z]/;
-var SVGNS = "http://www.w3.org/2000/svg";
-var Component = /** @class */ (function () {
-    function Component(props, children) {
-        this.props = props;
-        this.children = children;
-    }
-    return Component;
-}());
-export { Component };
-var StylesheetClass = /** @class */ (function () {
-    function StylesheetClass(className, clause, defn, styleNode) {
-        this.className = className;
-        this.clause = clause;
-        this.styleNode = styleNode;
-        this._pieces = [];
-        this._updates = [];
-        this._pieces.push(this.clause + "{");
-        this.compileDefinition(defn);
-        this._pieces.push("}");
-        this._update();
-    }
-    StylesheetClass.prototype.writeClause = function (idx, cssKey, k, val) {
-        if (val == null) {
-            this._pieces[idx] = "";
-        }
-        else {
-            this._pieces[idx] = cssKey + ":" + formatStyleProp(k, val);
-        }
-    };
-    StylesheetClass.prototype.compileClause = function (k, v) {
-        var _this = this;
-        var cssKey = k.replace(/[A-Z]/g, function (v) { return "-" + v.toLowerCase(); });
-        var idx = this._pieces.push("") - 1;
-        if (typeof v === "function") {
-            this._updates.push(function () {
-                _this.writeClause(idx, cssKey, k, v());
-            });
-        }
-        else {
-            this.writeClause(idx, cssKey, k, v);
-        }
-    };
-    StylesheetClass.prototype.compileDefinition = function (defn) {
-        var _this = this;
-        Object.keys(defn).forEach(function (k) {
-            _this.compileClause(k, defn[k]);
-            _this._pieces.push(";");
-        });
-    };
-    StylesheetClass.prototype.withSubRule = function (clause, defn) {
-        this._pieces.push(this.clause + " " + clause + "{");
-        this.compileDefinition(defn);
-        this._pieces.push("}");
-        this._update();
-        return this;
-    };
-    StylesheetClass.prototype.withMediaQuery = function (condition, defn) {
-        var _this = this;
-        this._pieces.push("@media ");
-        var keys = Object.keys(condition);
-        keys.forEach(function (k, idx) {
-            if (idx > 0)
-                _this._pieces.push(" and ");
-            _this._pieces.push("(");
-            _this.compileClause(k, condition[k]);
-            _this._pieces.push(")");
-        });
-        this._pieces.push(" {" + this.clause + " {");
-        this.compileDefinition(defn);
-        this._pieces.push("}}");
-        this._update();
-        return this;
-    };
-    StylesheetClass.prototype._update = function () {
-        this._updates.forEach(function (cb) { return cb(); });
-        this.styleNode.textContent = this._pieces.join("");
-    };
-    return StylesheetClass;
-}());
-function formatStyleProp(k, val) {
-    if (typeof val === "number" && matchPx.test(k))
-        return val + "px";
-    else
-        return val;
+const svgns = "http://www.w3.org/2000/svg";
+export class USXComponent {
 }
-var styleSheet;
-function createIsolatedContext() {
-    var elementMap = new Map();
-    var inUpdateUI = false;
-    function forEachUI(cb) {
-        elementMap.forEach(function (map, el) {
-            cb(el);
-        });
+function createContext() {
+    let defaultProps = {};
+    const bindings = new Map();
+    class USXBinding {
+        constructor() {
+            this.updaters = [];
+            this.onRemovers = [];
+        }
     }
-    function updateUI() {
-        if (inUpdateUI) {
+    function append(el, child) {
+        if (child == null)
             return;
+        if (typeof child === 'string') {
+            el.appendChild(document.createTextNode(child));
         }
-        inUpdateUI = true;
-        try {
-            elementMap.forEach(function (map, el) {
-                for (var _i = 0, _a = map.update; _i < _a.length; _i++) {
-                    var cb = _a[_i];
-                    cb(el);
-                }
-            });
+        else if (typeof child === 'number') {
+            el.appendChild(document.createTextNode(child + ""));
         }
-        finally {
-            inUpdateUI = false;
-        }
-    }
-    function action(fn) {
-        try {
-            return fn();
-        }
-        finally {
-            updateUI();
-        }
-    }
-    function unmountUI(el) {
-        try {
-            for (var _i = 0, _a = callbacksForEl(el, "unmount", false); _i < _a.length; _i++) {
-                var cb = _a[_i];
-                cb(el);
+        else if (child instanceof Array) {
+            for (const item of child) {
+                append(el, item);
             }
         }
-        finally {
-            elementMap.delete(el);
+        else if (child instanceof USXComponent) {
+            append(el, child._render);
         }
-        for (var c = el.firstElementChild; c; c = c.nextElementSibling) {
-            unmountUI(c);
-        }
-    }
-    function unmountAll() {
-        elementMap.forEach(function (map, el) {
-            if (map.unmount)
-                for (var _i = 0, _a = map.unmount; _i < _a.length; _i++) {
-                    var cb = _a[_i];
-                    cb(el);
-                }
-        });
-        elementMap.clear();
-    }
-    function callbacksForEl(el, action, create) {
-        var ed = elementMap.get(el);
-        if (ed == null) {
-            if (!create) {
-                return [];
-            }
-            elementMap.set(el, ed = {
-                update: []
-            });
-        }
-        var callbacks = ed[action];
-        if (callbacks == null) {
-            if (!create) {
-                return [];
-            }
-            callbacks = ed[action] = [];
-        }
-        return callbacks;
-    }
-    function on(el, action, callback) {
-        callbacksForEl(el, action, true).push(callback);
-    }
-    function cssClass(a, b) {
-        var styleNode = document.createTextNode("");
-        var className = typeof a === "string" ? null : "c" + Math.random().toString(16).substring(2);
-        var clause = typeof a === "string" ? a : "." + className;
-        var styles = typeof a === "string" ? b : a;
-        var cls = new StylesheetClass(className, clause, styles, styleNode);
-        if (styleSheet == null) {
-            styleSheet = document.createElement("style");
-            document.head.appendChild(styleSheet);
-        }
-        styleSheet.appendChild(styleNode);
-        onUpdateUI(styleSheet, function () {
-            cls._update();
-        });
-        return cls;
-    }
-    function onUpdateUI(el, callback) {
-        on(el, "update", callback);
-        callback(el);
-    }
-    function onUnmountUI(el, callback) {
-        on(el, "unmount", callback);
-    }
-    function applyStyleProp(el, k, val) {
-        el.style[k] = formatStyleProp(k, val);
-    }
-    function formatAttr(val) {
-        if (val instanceof Array) {
-            return val.filter(function (v) { return v != null; }).map(function (k) { return formatAttr(k); }).join(" ");
-        }
-        else if (val instanceof StylesheetClass)
-            return val.className;
         else
-            return val;
+            el.appendChild(child);
     }
-    function applyAttribute(el, k, val) {
-        if (k.startsWith("__"))
-            return;
-        if (el.tagName === "INPUT" && directAttribute.test(k))
-            el[k] = val;
-        else if (val != null)
-            el.setAttribute(k, formatAttr(val));
-        else
-            el.removeAttribute(k);
-    }
-    function needsApply(val) {
-        return (typeof val === 'function');
-    }
-    function applyValue(el, pval, callback) {
-        if (typeof pval === 'function') {
-            onUpdateUI(el, function () { return callback(pval()); });
-        }
-        else {
-            callback(pval);
+    function setAttribute(el, name, value) {
+        if (/^(textContent|innerHTML|value|checked)$/.test(name))
+            el[name] = value;
+        else if (name === "__source")
+            el.setAttribute("__source", value.fileName + ":" + value.lineNumber);
+        else if (name !== "__self") {
+            if (value != null)
+                el.setAttribute(name, value);
+            else
+                el.removeAttribute(name);
         }
     }
-    function setAttribute(el, prop, val) {
-        if (val == null) {
-            return;
+    function setStyle(el, value) {
+        for (const k in value) {
+            const applyValue = (v) => {
+                if (v != null) {
+                    el.style[k] = v;
+                }
+                else {
+                    el.style.removeProperty(k);
+                }
+            };
+            const v = value[k];
+            if (typeof v === "function") {
+                apply(el, applyValue, v);
+            }
+            else {
+                applyValue(v);
+            }
         }
-        if (isEvent.test(prop)) {
-            if (typeof val === "function") {
-                el.addEventListener(prop.substr(2).toLowerCase(), function () {
-                    var args = [];
-                    for (var _i = 0; _i < arguments.length; _i++) {
-                        args[_i] = arguments[_i];
+    }
+    function el(factory, props, ...children) {
+        const combinedProps = Object.assign(Object.assign({}, defaultProps), props);
+        if (typeof factory !== 'string') {
+            if (factory.prototype instanceof USXComponent) {
+                const component = new factory(combinedProps);
+                component._render = component.render(combinedProps);
+                return component;
+            }
+            else
+                return factory(combinedProps, children);
+        }
+        const el = /^(svg|circle|defs|filter|g|line|linearGradient|marker|path|pattern|polygon|polyline|radialGradient|rect|stop|switch|text|fe[A-Z][A-Za-z]+)$/.test(factory) ? document.createElementNS(svgns, factory) : document.createElement(factory);
+        for (const k in combinedProps) {
+            const v = combinedProps[k];
+            if (typeof v === "function") {
+                if (/^on[A-Z]/.test(k)) {
+                    el.addEventListener(k.substring(2).toLowerCase(), function () {
+                        try {
+                            v.apply(null, arguments);
+                        }
+                        finally {
+                            update();
+                        }
+                    });
+                }
+                else {
+                    apply(el, value => setAttribute(el, k, value), v);
+                }
+            }
+            else if (k === "style" && typeof v === "object") {
+                setStyle(el, v);
+            }
+            else {
+                setAttribute(el, k, v);
+            }
+        }
+        for (const c of children) {
+            append(el, c);
+        }
+        return el;
+    }
+    function withDefaultProps(props, callback) {
+        const savedProps = defaultProps;
+        try {
+            defaultProps = Object.assign(Object.assign({}, defaultProps), props);
+            return callback();
+        }
+        finally {
+            defaultProps = savedProps;
+        }
+    }
+    function getOrCreateBinding(el) {
+        let bind = bindings.get(el);
+        if (bind === undefined) {
+            bind = new USXBinding();
+            bindings.set(el, bind);
+        }
+        return bind;
+    }
+    function apply(el, fn, ...args) {
+        const applyArgs = args.map(a => typeof a === "function" ? a() : a);
+        fn.apply(null, applyArgs);
+        let bind = getOrCreateBinding(el);
+        bind.updaters.push(() => {
+            let changed = false;
+            if (args.length > 0) {
+                const newArgs = args.map(a => typeof a === "function" ? a() : a);
+                for (let idx = 0; idx < args.length; idx++) {
+                    if (applyArgs[idx] !== newArgs[idx]) {
+                        changed = true;
+                        applyArgs[idx] = newArgs[idx];
                     }
-                    return action(val.bind.apply(val, [this].concat(args)));
-                });
+                }
             }
-            /* develblock:start */
-            else
-                console.log("non-function event");
-            /* develblock:end */
-        }
-        else if (prop === "style") {
-            if (typeof val === "object" && val != null) {
-                Object.keys(val).forEach(function (k) {
-                    var stylePropVal = val[k];
-                    applyValue(el, stylePropVal, function (v) { return applyStyleProp(el, k, v); });
-                });
+            if (changed || args.length == 0) {
+                fn.apply(null, applyArgs);
             }
+        });
+    }
+    function onRemove(el, fn) {
+        let bind = getOrCreateBinding(el);
+        bind.onRemovers.push(fn);
+    }
+    function unbind(el) {
+        const bind = bindings.get(el);
+        if (bind !== undefined) {
+            bindings.delete(el);
+            bind.onRemovers.forEach(fn => fn());
         }
-        else {
-            applyValue(el, val, function (v) { return applyAttribute(el, prop, v); });
+        for (let child = el.firstElementChild; child; child = child.nextElementSibling) {
+            unbind(child);
         }
     }
-    function applyContent(el, c1, c2, v) {
-        while (c1.nextSibling != c2) {
-            el.removeChild(c1.nextSibling);
+    function remove(...elements) {
+        for (const el of elements) {
+            if (el.parentNode) {
+                el.parentNode.removeChild(el);
+            }
+            unbind(el);
         }
-        append(el, v, c2);
     }
-    function propsWithContext(props) {
-        var mergedProps = {};
-        for (var k in defaultProps) {
-            mergedProps[k] = defaultProps[k];
-        }
-        for (var k in props) {
-            mergedProps[k] = props[k];
-        }
-        return mergedProps;
+    function getDefaultProps() {
+        return defaultProps;
     }
-    function append(el, c, before) {
-        if (c == null)
+    let inUpdate = false;
+    function update() {
+        if (inUpdate) {
+            // ignore reentrant update
             return;
-        if (c instanceof Node) {
-            if (before)
-                el.insertBefore(c, before);
-            else
-                el.appendChild(c);
         }
-        else if (c instanceof Array) {
-            c.forEach(function (i) { return append(el, i, before); });
+        inUpdate = true;
+        try {
+            bindings.forEach(binding => {
+                binding.updaters.forEach(v => v());
+            });
         }
-        else if (c instanceof Component) {
-            append(el, c._render, before);
-        }
-        else if (needsApply(c)) {
-            var c1_1 = document.createTextNode("");
-            var c2_1 = document.createTextNode("");
-            el.appendChild(c1_1);
-            el.appendChild(c2_1);
-            applyValue(el, c, function (v) { return applyContent(el, c1_1, c2_1, v); });
-        }
-        else if (before) {
-            el.insertBefore(document.createTextNode("" + c), before);
-        }
-        else {
-            el.appendChild(document.createTextNode("" + c));
+        finally {
+            inUpdate = false;
         }
     }
-    function usx(tag, props) {
-        var children = [];
-        for (var _i = 2; _i < arguments.length; _i++) {
-            children[_i - 2] = arguments[_i];
-        }
-        if (typeof tag === 'string') {
-            var el_1 = matchSVGEl.test(tag) ? document.createElementNS(SVGNS, tag) : document.createElement(tag);
-            append(el_1, children, null);
-            if (props != null) {
-                Object.keys(props).forEach(function (k) { return setAttribute(el_1, k, props[k]); });
-            }
-            return el_1;
-        }
-        else if (typeof tag === "function" && tag.prototype instanceof Component) {
-            var mergeProps = propsWithContext(props);
-            var instance = new tag(mergeProps, children);
-            instance._render = instance.render(mergeProps, children);
-            return instance;
-        }
-        else if (typeof tag === 'function') {
-            return tag(propsWithContext(props), children);
-        }
-        else {
-            return null;
-        }
+    function clear() {
+        bindings.forEach(binding => {
+            binding.onRemovers.forEach(v => v());
+        });
+        bindings.clear;
     }
-    usx.create = createIsolatedContext;
-    usx.update = updateUI;
-    usx.onUpdate = onUpdateUI;
-    usx.onUnmount = onUnmountUI;
-    usx.unmount = unmountUI;
-    usx.forEach = forEachUI;
-    usx.unmountAll = unmountAll;
-    usx.cssClass = cssClass;
-    return usx;
+    return {
+        el,
+        withDefaultProps,
+        getDefaultProps,
+        apply,
+        update,
+        remove,
+        onRemove,
+        createContext,
+        clear
+    };
 }
-var usx = createIsolatedContext();
-export default usx;
-var defaultProps = {};
-export function getDefaultProps() {
-    return defaultProps;
-}
-export function withDefaultProps(newProps, callback) {
-    var savedContext = defaultProps;
-    try {
-        defaultProps = {};
-        for (var k in savedContext) {
-            defaultProps[k] = savedContext[k];
-        }
-        for (var k in newProps) {
-            defaultProps[k] = newProps[k];
-        }
-        callback();
-    }
-    finally {
-        defaultProps = savedContext;
-    }
-}
+export const usx = createContext();
