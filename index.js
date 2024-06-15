@@ -1,46 +1,39 @@
 const matchPx = /^(left|top|right|bottom|width|height|(margin|padding|border)(Left|Top|Right|Bottom)?(Width)?|border(Top|Bottom)?(Left|Right)?Radius|(min|max)Width|flexBasis|fontSize)$/;
-type USXFunctionFactory<T extends object> = (props: T) => USXChildren;
-type USXClassFactory<T> = { new(props: T): USXComponent<T> };
-type USXChildItem = string | number | Element | USXComponent<any> | null;
-type USXChildren = USXChildItem | USXChildItem[];
-type USXEventCallback = () => void;
-
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
-
-export abstract class USXComponent<T> {
-    _render?: USXChildren;
-
-    constructor(readonly props: T) { }
-
-    abstract render(props: T): USXChildren;
+export class USXComponent {
+    constructor(props) {
+        this.props = props;
+    }
 }
-
-let defaultUIProps: any = {};
-const bindings = new Map<Element, USXBinding>();
-
+let defaultProps = {};
+const bindings = new Map();
 class USXBinding {
-    updaters: USXEventCallback[] = [];
-    onRemovers: USXEventCallback[] = [];
+    constructor() {
+        this.updaters = [];
+        this.onRemovers = [];
+    }
 }
-
-function append(el: Node, child: USXChildren) {
+function append(el, child) {
     if (child == null)
         return;
     if (typeof child === 'string') {
         el.appendChild(document.createTextNode(child));
-    } else if (typeof child === 'number') {
+    }
+    else if (typeof child === 'number') {
         el.appendChild(document.createTextNode(child + ""));
-    } else if (child instanceof Array) {
+    }
+    else if (child instanceof Array) {
         for (const item of child) {
             append(el, item);
         }
-    } else if (child instanceof USXComponent) {
+    }
+    else if (child instanceof USXComponent) {
         append(el, child._render);
-    } else
+    }
+    else
         el.appendChild(child);
 }
-
-function setAttribute(el: any, name: string, value: any) {
+function setAttribute(el, name, value) {
     if (/^(textContent|innerHTML|value|checked|disabled|hidden)$/.test(name))
         el[name] = value;
     else {
@@ -50,39 +43,36 @@ function setAttribute(el: any, name: string, value: any) {
             el.removeAttribute(name);
     }
 }
-
-function setStyle(el: any, value: any) {
+function setStyle(el, value) {
     for (const k in value) {
-        const applyValue = (v: any) => {
+        const applyValue = (v) => {
             if (typeof v === "number" && matchPx.test(k))
                 el.style[k] = v + "px";
             else if (v == null)
                 el.style[k] = "";
             else
                 el.style[k] = v;
-        }
-
+        };
         const v = value[k];
-
         if (typeof v === "function") {
-            applyUI(el, applyValue, v)
-        } else {
+            applyUI(el, applyValue, v);
+        }
+        else {
             applyValue(v);
         }
     }
 }
-
-export function jsx<T extends object>(factory: string | USXFunctionFactory<T> | USXClassFactory<T>, props?: T | null): USXChildren {
-    const combinedProps: any = { ...defaultUIProps, ...props };
-    const children: USXChildren = combinedProps["children"];
-
+export function jsx(factory, props) {
+    const combinedProps = Object.assign(Object.assign({}, defaultProps), props);
+    const children = combinedProps["children"];
     if (typeof factory !== 'string') {
         if (factory.prototype instanceof USXComponent) {
-            const component = new (factory as USXClassFactory<any>)(combinedProps);
+            const component = new factory(combinedProps);
             component._render = component.render(combinedProps);
             return component;
-        } else
-            return (factory as USXFunctionFactory<T>)(combinedProps);
+        }
+        else
+            return factory(combinedProps);
     }
     const el = /^(svg|circle|defs|filter|g|line|linearGradient|marker|path|pattern|polygon|polyline|radialGradient|rect|stop|switch|text|fe[A-Z][A-Za-z]+)$/.test(factory) ? document.createElementNS(SVG_NAMESPACE, factory) : document.createElement(factory);
     for (const k in combinedProps) {
@@ -94,16 +84,20 @@ export function jsx<T extends object>(factory: string | USXFunctionFactory<T> | 
                 el.addEventListener(k.substring(2).toLowerCase(), function () {
                     try {
                         v.apply(null, arguments);
-                    } finally {
+                    }
+                    finally {
                         updateUI();
                     }
                 });
-            } else {
+            }
+            else {
                 applyUI(el, value => setAttribute(el, k, value), v);
             }
-        } else if (k === "style" && typeof v === "object") {
+        }
+        else if (k === "style" && typeof v === "object") {
             setStyle(el, v);
-        } else {
+        }
+        else {
             setAttribute(el, k, v);
         }
     }
@@ -111,26 +105,24 @@ export function jsx<T extends object>(factory: string | USXFunctionFactory<T> | 
         append(el, children);
     return el;
 }
-
-export function Fragment(props: any) {
+export function Fragment(props) {
     const frag = new DocumentFragment();
     const children = props["children"];
     if (children != null)
         append(frag, children);
     return frag;
 }
-
-export function withDefaultUIProps<T>(props: object, callback: () => T) {
-    const savedProps = defaultUIProps;
+export function withDefaultProps(props, callback) {
+    const savedProps = defaultProps;
     try {
-        defaultUIProps = { ...defaultUIProps, ...props };
+        defaultProps = Object.assign(Object.assign({}, defaultProps), props);
         return callback();
-    } finally {
-        defaultUIProps = savedProps;
+    }
+    finally {
+        defaultProps = savedProps;
     }
 }
-
-function getOrCreateBinding(el: Element) {
+function getOrCreateBinding(el) {
     let bind = bindings.get(el);
     if (bind === undefined) {
         bind = new USXBinding();
@@ -138,12 +130,9 @@ function getOrCreateBinding(el: Element) {
     }
     return bind;
 }
-
-export function applyUI(el: Element, fn: (...args: any[]) => void, ...args: any[]) {
+export function applyUI(el, fn, ...args) {
     const applyArgs = args.map(a => typeof a === "function" ? a() : a);
-
     fn.apply(null, applyArgs);
-
     let bind = getOrCreateBinding(el);
     bind.updaters.push(() => {
         let changed = false;
@@ -156,19 +145,16 @@ export function applyUI(el: Element, fn: (...args: any[]) => void, ...args: any[
                 }
             }
         }
-
         if (changed || args.length == 0) {
             fn.apply(null, applyArgs);
         }
     });
 }
-
-export function onRemoveUI(el: Element, fn: USXEventCallback) {
+export function onRemoveUI(el, fn) {
     let bind = getOrCreateBinding(el);
     bind.onRemovers.push(fn);
 }
-
-function unbind(el: Element) {
+function unbind(el) {
     const bind = bindings.get(el);
     if (bind !== undefined) {
         bindings.delete(el);
@@ -178,8 +164,7 @@ function unbind(el: Element) {
         unbind(child);
     }
 }
-
-export function removeUI(...elements: Element[]) {
+export function removeUI(...elements) {
     for (const el of elements) {
         if (el.parentNode) {
             el.parentNode.removeChild(el);
@@ -187,11 +172,9 @@ export function removeUI(...elements: Element[]) {
         unbind(el);
     }
 }
-
-export function getDefaultUIProps() {
-    return defaultUIProps;
+export function getDefaultPropsUI() {
+    return defaultProps;
 }
-
 let inUpdate = false;
 export function updateUI() {
     if (inUpdate) {
@@ -202,15 +185,15 @@ export function updateUI() {
     try {
         bindings.forEach(binding => {
             binding.updaters.forEach(v => v());
-        })
-    } finally {
+        });
+    }
+    finally {
         inUpdate = false;
     }
 }
-
 export function resetUIBindings() {
     bindings.forEach(binding => {
         binding.onRemovers.forEach(v => v());
-    })
+    });
     bindings.clear;
 }

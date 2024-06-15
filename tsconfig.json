@@ -3,7 +3,7 @@
     /* Basic Options */
     "target": "es6", 
     "declaration": true,
-    "outDir": "./dist",
+    "outDir": ".",
     "moduleResolution": "node",
     "lib": [
       "dom",
@@ -11,5 +11,5 @@
       "es2015.promise"
     ]
   },
-  "files": ["lib/index.ts"]
+  "files": ["lib/index.ts", "lib/jsx-runtime.ts"]
 }

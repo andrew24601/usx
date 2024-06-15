@@ -45,10 +45,10 @@ const x = <ul>{items.map(t=><li>{t}</li>)}</ul>;
 Usx can aso be used without a JSX environment.
 
 ~~~~
-const x = usx.el("div", {class: "my-div"});
-const x = us.el("div", null, "This is a ", usx("b", null, "Bold"), " message);
-const x = us.el("div", null, "Hello " + text);
-const x = us.el("ul", null, items.map(t=>usx("li", null, t)));
+const x = jsx("div", {class: "my-div"});
+const x = jsx("div", {children: ["This is a ", jsx("b", null, "Bold"), " message"]});
+const x = jsx("div", {children: "Hello " + text});
+const x = jsx("ul", {children: items.map(t=>jsx("li", null, t))});
 ~~~~
 
 ## Event handlers
@@ -106,28 +106,15 @@ This is where the usx.remove function comes in.
 
 Calling usx.remove on an element deregisters the dynamic property updating for the element and any of its child elements.
 
-If you have more complex updating requirements than can’t be handled with a function on a single property, then the usx.onRemove function is a way to hook directly into the usx.update flow.
+If you have more complex updating requirements than can’t be handled with a function on a single property, then the onRemoveUI function is a way to hook directly into the usx.update flow.
 
 ~~~~
-usx.onRemove(el, ()=>{
+onRemoveUI(el, ()=>{
     …do stuff…
 });
 ~~~~
 
 The callback passed to usx.onUpdate will execute when usx.update is called. The first parameter is the element that the update is associated with – this is necessary to make sure the update function is removed when the associated element is unmounted from USX by calling usx.remove.
-
-## Multiple Contexts
-
-The default functions all belong to a single USX context that updates all the mounted elements with a single call to usx.update.
-
-If there are circumstances where this isn’t appropriate – for example there is a section of your UI where you want to be updating elements dynamically but separate from the rest of the elements. E.g. Dynamic updates for a drag and drop operation but you don’t want the usx.update to be evaluated for all the elements on the page.
-
-The usx.createContext() function creates an entirely isolated USX context - the function returns a new usx function with the same interface, but all the behaviour is isolated to the context that has just been created.
-
-~~~~
-import {usx} from 'usx';
-const context = usx.createContext();
-~~~~
 
 ## Components
 
