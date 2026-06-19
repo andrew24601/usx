@@ -1,15 +1,18 @@
 {
   "compilerOptions": {
-    /* Basic Options */
-    "target": "es6", 
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "declaration": true,
-    "outDir": ".",
-    "moduleResolution": "node",
+    "rootDir": "src",
+    "outDir": "dist",
     "lib": [
-      "dom",
-      "es2015",
-      "es2015.promise"
-    ]
+      "DOM",
+      "ES2022"
+    ],
+    "forceConsistentCasingInFileNames": true
   },
-  "files": ["lib/index.ts", "lib/jsx-runtime.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }

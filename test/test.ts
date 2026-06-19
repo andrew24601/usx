@@ -1,6 +1,7 @@
-import 'jsdom-global/register';
+import 'jsdom-global/register.js';
 import { expect } from 'chai';
-import {jsx, USXComponent, updateUI, withDefaultUIProps, onRemoveUI, removeUI, applyUI, resetUIBindings, getDefaultUIProps, Fragment} from "../lib/index"
+import { describe, it } from 'mocha';
+import {jsx, USXComponent, updateUI, onRemoveUI, removeUI, applyUI, Fragment} from "../src/index.js"
 
 const SVGNS = "http://www.w3.org/2000/svg";
 
@@ -11,10 +12,6 @@ interface MyButtonProps {
 function MyButton({children}: MyButtonProps) {
     return jsx('button', {class: 'my-button', children});
 }
-
-afterEach(()=>{
-    resetUIBindings();
-});
 
 describe('Simple usx test', ()=>{
     it('construct div', () => {
@@ -40,6 +37,10 @@ describe('Simple usx test', ()=>{
         expect(el.id).to.equal('div1');
         expect(el.style.fontWeight).to.equal("bold");
     })
+    it('adds pixels to numeric dimensional styles', () => {
+        const el = jsx('div', {style: {fontSize: 12}}) as HTMLDivElement;
+        expect(el.style.fontSize).to.equal('12px');
+    })
     it('construct div with computed style', () => {
         let isBold = true;
         const el = jsx('div', {class: 'my-div', id: 'div1', style: {fontWeight: ()=>isBold ? "bold" : "normal"}}) as HTMLDivElement;
@@ -64,9 +65,6 @@ describe('Simple usx test', ()=>{
         const el = jsx('div', {class: 'my-div', id: 'div1', style: 12}) as HTMLDivElement;
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
-    })
-    it('construct div with style', () => {
-        const el = jsx('div', {class: 'my-div', id: 'div1', style: {fontBold: true, fontSize: 12}});
     })
     it('construct div with content', () => {
         const el = jsx('div', {class: 'my-div', id: 'div1', children: ['Hello world']}) as HTMLDivElement;
@@ -155,7 +153,7 @@ describe('Evaluated content', ()=>{
     it('evaluated attributes', ()=>{
         let myId = "div1";
         let myClass = "my-div";
-        const el = jsx('div', {class: ()=>myClass, id: ()=>myId}) as HTMLDivElement as HTMLDivElement;
+        const el = jsx('div', {class: ()=>myClass, id: ()=>myId}) as HTMLDivElement;
         expect(el.className).to.equal('my-div');
         expect(el.id).to.equal('div1');
         myId = "div2";
@@ -248,23 +246,6 @@ describe('Evaluated content', ()=>{
         expect(el.id).to.equal('div1');
         expect(wasUnmounted).to.equal(true);
     });
-    it('unmount all', ()=>{
-        let myId = "div1";
-        const el = jsx('div', {class: 'my-div', id: ()=>myId}) as HTMLDivElement;
-        const root = jsx("div", {class: 'my-div', name: "fred", children: [el]}) as HTMLDivElement;
-        expect(el.className).to.equal('my-div');
-        expect(el.id).to.equal('div1');
-
-        let wasUnmounted = false;
-        onRemoveUI(el, ()=>{
-            wasUnmounted = true;
-        })
-
-        resetUIBindings();
-
-        expect(wasUnmounted).to.equal(true);
-    });
-
 });
 
 describe('nested updateUI', ()=>{
@@ -304,50 +285,7 @@ describe('components', ()=>{
 });
 
 class MyButtonComponent extends USXComponent<any> {
-    render(props) {
+    render(props: any) {
         return jsx("button", {children: [props.caption]});
     }
 }
-
-function DivWithContext(props) {
-    return jsx('div', {children: [props.count]});
-}
-
-describe('Context test', ()=>{
-    it('set context', ()=>{
-        let invoked = false;
-        let captureCount;
-        withDefaultUIProps({count: 3}, ()=>{
-            invoked = true;
-            captureCount = getDefaultUIProps().count;
-        });
-        expect(invoked).to.be.eq(true);
-        expect(captureCount).to.be.eq(3);
-    });
-
-    it('nested context', ()=>{
-        let invoked = false;
-        let captureCount, subCaptureCount;
-        let capturePants;
-        withDefaultUIProps({count: 3}, ()=>{
-            invoked = true;
-            captureCount = getDefaultUIProps().count;
-            withDefaultUIProps({count: 5, pants: "green"}, ()=>{
-                subCaptureCount = getDefaultUIProps().count;
-                capturePants = getDefaultUIProps().pants;
-            });
-        });
-        expect(invoked).to.be.eq(true);
-        expect(captureCount).to.be.eq(3);
-        expect(subCaptureCount).to.be.eq(5);
-        expect(capturePants).to.be.eq("green");
-    });
-
-    it('applied context', ()=>{
-        let el: HTMLDivElement;
-        withDefaultUIProps({count: 3}, ()=>{
-            el = jsx(DivWithContext) as HTMLDivElement;
-        });
-        expect(el!.textContent).to.be.eq('3');
-    });
-});

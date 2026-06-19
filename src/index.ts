@@ -15,7 +15,6 @@ export abstract class USXComponent<T> {
     abstract render(props: T): USXChildren;
 }
 
-let defaultUIProps: any = {};
 const bindings = new Map<Element, USXBinding>();
 
 class USXBinding {
@@ -23,7 +22,7 @@ class USXBinding {
     onRemovers: USXEventCallback[] = [];
 }
 
-function append(el: Node, child: USXChildren) {
+function append(el: Node, child: USXChildren | undefined) {
     if (child == null)
         return;
     if (typeof child === 'string') {
@@ -73,7 +72,7 @@ function setStyle(el: any, value: any) {
 }
 
 export function jsx<T extends object>(factory: string | USXFunctionFactory<T> | USXClassFactory<T>, props?: T | null): USXChildren {
-    const combinedProps: any = { ...defaultUIProps, ...props };
+    const combinedProps: any = props ?? {};
     const children: USXChildren = combinedProps["children"];
 
     if (typeof factory !== 'string') {
@@ -118,16 +117,6 @@ export function Fragment(props: any) {
     if (children != null)
         append(frag, children);
     return frag;
-}
-
-export function withDefaultUIProps<T>(props: object, callback: () => T) {
-    const savedProps = defaultUIProps;
-    try {
-        defaultUIProps = { ...defaultUIProps, ...props };
-        return callback();
-    } finally {
-        defaultUIProps = savedProps;
-    }
 }
 
 function getOrCreateBinding(el: Element) {
@@ -188,10 +177,6 @@ export function removeUI(...elements: Element[]) {
     }
 }
 
-export function getDefaultUIProps() {
-    return defaultUIProps;
-}
-
 let inUpdate = false;
 export function updateUI() {
     if (inUpdate) {
@@ -206,11 +191,4 @@ export function updateUI() {
     } finally {
         inUpdate = false;
     }
-}
-
-export function resetUIBindings() {
-    bindings.forEach(binding => {
-        binding.onRemovers.forEach(v => v());
-    })
-    bindings.clear;
 }
