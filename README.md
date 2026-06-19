@@ -43,14 +43,14 @@ Fragments, strings, numbers, arrays, DOM elements, and USX components can all be
 
 ## Events and reactive properties
 
-Properties beginning with `on` and a capital letter are registered as event listeners. Other function-valued properties are reevaluated by `updateUI`.
+Properties beginning with `on-` are registered as event listeners. The text after `on-` is passed unchanged to `addEventListener`, so native events use their DOM names and custom event casing is preserved. Other function-valued properties are reevaluated by `updateUI`.
 
 ```tsx
 import { updateUI } from "usx";
 
 let count = 0;
 const counter = (
-  <button onClick={() => count++} title={() => `${count} clicks`}>
+  <button on-click={() => count++} title={() => `${count} clicks`}>
     Click me
   </button>
 );
@@ -60,6 +60,11 @@ updateUI();
 ```
 
 Event handlers registered by USX call `updateUI` automatically after they run.
+
+```tsx
+<div on-dblclick={handleDoubleClick} />
+<div on-CaseSensitive={handleCustomEvent} />
+```
 
 Style properties may also be reactive. Numeric values for dimensional properties are converted to pixels:
 
@@ -101,14 +106,14 @@ class List extends USXComponent<{ items: string[] }> {
 Reactive bindings remain registered until their element is removed with `removeUI`:
 
 ```ts
-import { applyUI, onRemoveUI, removeUI } from "usx";
+import { applyElement, onRemoveElement, removeUI } from "usx";
 
-applyUI(element, value => {
+applyElement(element, value => {
   element.textContent = value;
 }, () => currentValue);
 
-onRemoveUI(element, () => disposeResource());
+onRemoveElement(element, () => disposeResource());
 removeUI(element);
 ```
 
-`removeUI` detaches each supplied element, removes bindings for it and its descendants, and runs their removal callbacks.
+`applyElement` runs immediately, then again whenever one of its computed arguments changes. When registered without arguments, it runs on every `updateUI`. `removeUI` detaches each supplied element, removes bindings for it and its descendants, and runs their removal callbacks.
