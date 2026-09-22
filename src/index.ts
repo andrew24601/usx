@@ -20,11 +20,18 @@ const pixelStyleProperties = new Set([
     "scrollPadding", "scrollPaddingBlock", "scrollPaddingBlockStart", "scrollPaddingBlockEnd",
     "scrollPaddingInline", "scrollPaddingInlineStart", "scrollPaddingInlineEnd", "shapeMargin"
 ]);
-type USXFunctionFactory<T extends object> = (props: T) => USXChildren;
-type USXClassFactory<T extends object> = { new(props: T): USXComponent<T> };
-type USXChildItem = string | number | boolean | Node | USXComponent<any> | null | undefined;
-type USXChildren = USXChildItem | USXChildren[];
+export type USXChild = string | number | boolean | Node | null | undefined;
+export type USXChildren = USXChild | USXChildren[];
+export type USXFunctionFactory<T extends object = Record<string, unknown>> = (props: T) => USXChildren;
+export type USXTextValue = string | number | boolean | null | undefined;
+export interface USXIntrinsicProps {
+    children?: USXChildren;
+    [name: string]: any;
+}
 type USXEventCallback = () => void;
+export type USXInputValues<T extends readonly unknown[]> = {
+    -readonly [K in keyof T]: T[K] extends () => infer V ? V : T[K]
+};
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const svgTags = new Set([
@@ -41,21 +48,10 @@ const booleanProperties = new Set([
     "noValidate", "open", "playsInline", "readOnly", "required", "reversed", "selected"
 ]);
 
-export abstract class USXComponent<T> {
-    _rendered?: USXChildren;
-    readonly props: T;
-
-    constructor(props: T) {
-        this.props = props;
-    }
-
-    abstract render(props: T): USXChildren;
-}
-
-const bindings = new Map<Element, USXBinding>();
+const bindings = new Map<Node, USXBinding>();
 
 class USXBinding {
-    updateCallbacks: USXEventCallback[] = [];
+    syncCallbacks: USXEventCallback[] = [];
     removeCallbacks: USXEventCallback[] = [];
 }
 
@@ -70,8 +66,6 @@ function append(el: Node, child: USXChildren | undefined) {
         for (const item of child) {
             append(el, item);
         }
-    } else if (child instanceof USXComponent) {
-        append(el, child._rendered);
     } else
         el.appendChild(child);
 }
@@ -79,8 +73,17 @@ function append(el: Node, child: USXChildren | undefined) {
 function setAttribute(el: any, name: string, value: any) {
     if (booleanProperties.has(name))
         el[name] = Boolean(value);
-    else if (directProperties.has(name))
-        el[name] = value;
+    else if (directProperties.has(name)) {
+        const errors: unknown[] = [];
+        if (name === "textContent" || name === "innerHTML")
+            collectUnbindChildren(el, errors);
+        try {
+            el[name] = value;
+        } catch (error) {
+            errors.push(error);
+        }
+        throwCleanupErrors(errors);
+    }
     else {
         if (value != null)
             el.setAttribute(name, value);
@@ -103,7 +106,7 @@ function setStyle(el: any, value: any) {
         const v = value[k];
 
         if (typeof v === "function") {
-            applyElement(el, value => setStyleValue(el, k, value), v)
+            syncElement(el, [v], value => setStyleValue(el, k, value))
         } else {
             setStyleValue(el, k, v);
         }
@@ -112,7 +115,7 @@ function setStyle(el: any, value: any) {
 
 function setReactiveStyle(el: any, getValue: () => any) {
     let previousKeys = new Set<string>();
-    applyElement(el, () => {
+    syncElement(el, [], () => {
         const value = getValue();
         const nextKeys = new Set<string>(Object.keys(value ?? {}));
 
@@ -132,38 +135,38 @@ function getEventName(property: string) {
     return property.startsWith("on-") && property.length > 3 ? property.substring(3) : undefined;
 }
 
-export function jsx<T extends object>(factory: string | USXFunctionFactory<T> | USXClassFactory<T>, props?: T | null): USXChildren {
+export function jsx<K extends keyof HTMLElementTagNameMap>(factory: K, props?: USXIntrinsicProps | null): HTMLElementTagNameMap[K];
+export function jsx<K extends keyof SVGElementTagNameMap>(factory: K, props?: USXIntrinsicProps | null): SVGElementTagNameMap[K];
+export function jsx<T extends object, R extends USXChildren>(factory: (props: T) => R, props?: T | null): R;
+export function jsx(factory: string | USXFunctionFactory<any>, props?: any | null): USXChildren;
+export function jsx(factory: string | USXFunctionFactory<any>, props?: any | null): USXChildren {
     const combinedProps: any = props ?? {};
     const children: USXChildren = combinedProps["children"];
 
-    if (typeof factory !== 'string') {
-        if (factory.prototype instanceof USXComponent) {
-            const component = new (factory as USXClassFactory<any>)(combinedProps);
-            component._rendered = component.render(combinedProps);
-            return component;
-        } else
-            return (factory as USXFunctionFactory<T>)(combinedProps);
-    }
+    if (typeof factory !== 'string')
+        return factory(combinedProps);
     const el = svgTags.has(factory) || /^fe[A-Z][A-Za-z]+$/.test(factory) ? document.createElementNS(SVG_NAMESPACE, factory) : document.createElement(factory);
-    for (const k in combinedProps) {
+    for (const k of Object.keys(combinedProps)) {
         if (k === "children")
             continue;
         const v = combinedProps[k];
         const eventName = getEventName(k);
         if (eventName !== undefined) {
             if (typeof v === "function") {
-                el.addEventListener(eventName, function (this: Element, event) {
+                const listener = function (this: Element, event: Event) {
                     try {
                         return v.call(this, event);
                     } finally {
-                        updateUI();
+                        syncUI();
                     }
-                });
+                };
+                el.addEventListener(eventName, listener);
+                addRemoveCallback(el, () => el.removeEventListener(eventName, listener));
             }
         } else if (k === "style" && typeof v === "function") {
             setReactiveStyle(el, v);
         } else if (typeof v === "function") {
-            applyElement(el, value => setAttribute(el, k, value), v);
+            syncElement(el, [v], value => setAttribute(el, k, value));
         } else if (k === "style" && typeof v === "object") {
             setStyle(el, v);
         } else {
@@ -175,7 +178,7 @@ export function jsx<T extends object>(factory: string | USXFunctionFactory<T> | 
     return el;
 }
 
-export function Fragment(props: any) {
+export function Fragment(props: {children?: USXChildren}) {
     const frag = new DocumentFragment();
     const children = props["children"];
     if (children != null)
@@ -183,32 +186,41 @@ export function Fragment(props: any) {
     return frag;
 }
 
-function getOrCreateBinding(el: Element) {
-    let bind = bindings.get(el);
+function getOrCreateBinding(node: Node) {
+    let bind = bindings.get(node);
     if (bind === undefined) {
         bind = new USXBinding();
-        bindings.set(el, bind);
+        bindings.set(node, bind);
     }
     return bind;
 }
 
-export function applyElement(el: Element, fn: (...args: any[]) => void, ...args: any[]) {
-    const values = evaluateArgs(args);
+export function syncElement<const T extends readonly unknown[]>(
+    el: Element,
+    inputs: T,
+    fn: (...values: USXInputValues<T>) => void
+): void;
+export function syncElement(el: Element, inputs: readonly unknown[], fn: (...values: any[]) => void) {
+    syncNode(el, inputs, fn);
+}
+
+function syncNode(node: Node, inputs: readonly unknown[], fn: (...values: any[]) => void) {
+    const values = evaluateInputs(inputs);
     fn(...values);
-    addUpdateCallback(el, fn, args, values);
+    addSyncCallback(node, fn, inputs, values);
 }
 
-function evaluateArgs(args: any[]) {
-    return args.map(arg => typeof arg === "function" ? arg() : arg);
+function evaluateInputs(inputs: readonly unknown[]) {
+    return inputs.map(input => typeof input === "function" ? input() : input);
 }
 
-function addUpdateCallback(el: Element, fn: (...args: any[]) => void, args: any[], values: any[]) {
-    const bind = getOrCreateBinding(el);
-    bind.updateCallbacks.push(() => {
+function addSyncCallback(node: Node, fn: (...values: any[]) => void, inputs: readonly unknown[], values: unknown[]) {
+    const bind = getOrCreateBinding(node);
+    bind.syncCallbacks.push(() => {
         let changed = false;
-        if (args.length > 0) {
-            const newValues = evaluateArgs(args);
-            for (let idx = 0; idx < args.length; idx++) {
+        if (inputs.length > 0) {
+            const newValues = evaluateInputs(inputs);
+            for (let idx = 0; idx < inputs.length; idx++) {
                 if (values[idx] !== newValues[idx]) {
                     changed = true;
                     values[idx] = newValues[idx];
@@ -216,83 +228,105 @@ function addUpdateCallback(el: Element, fn: (...args: any[]) => void, args: any[
             }
         }
 
-        if (changed || args.length === 0)
+        if (changed || inputs.length === 0)
             fn(...values);
     });
 }
 
-export function onRemoveElement(el: Element, fn: USXEventCallback) {
-    const bind = getOrCreateBinding(el);
+function textValue(value: USXTextValue) {
+    return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+export function syncText(getValue: () => USXTextValue) {
+    const node = document.createTextNode("");
+    syncNode(node, [getValue], value => node.data = textValue(value));
+    return node;
+}
+
+export function onRemoveElement(el: Element, fn: () => void) {
+    addRemoveCallback(el, fn);
+}
+
+function addRemoveCallback(node: Node, fn: () => void) {
+    const bind = getOrCreateBinding(node);
     bind.removeCallbacks.push(fn);
 }
 
-function unbind(node: USXChildren) {
+function collectUnbind(node: USXChildren, errors: unknown[]) {
     if (node == null || typeof node === "string" || typeof node === "number" || typeof node === "boolean") {
         return;
     }
 
     if (node instanceof Array) {
-        node.forEach(unbind);
+        node.forEach(item => collectUnbind(item, errors));
         return;
     }
 
-    if (node instanceof USXComponent) {
-        if (node._rendered != null) {
-            unbind(node._rendered);
-        }
-        return;
-    }
+    collectUnbindChildren(node, errors);
 
-    if (node instanceof Element) {
-        const bind = bindings.get(node);
-        if (bind !== undefined) {
-            bindings.delete(node);
-            bind.removeCallbacks.forEach(fn => fn());
+    const bind = bindings.get(node);
+    if (bind !== undefined) {
+        bindings.delete(node);
+        for (const fn of bind.removeCallbacks) {
+            try {
+                fn();
+            } catch (error) {
+                errors.push(error);
+            }
         }
     }
+}
 
-    for (let child = node.firstChild; child; child = child.nextSibling) {
-        unbind(child);
-    }
+function collectUnbindChildren(node: Node, errors: unknown[]) {
+    for (const child of Array.from(node.childNodes))
+        collectUnbind(child, errors);
+}
+
+function throwCleanupErrors(errors: unknown[]) {
+    if (errors.length === 1)
+        throw errors[0];
+    if (errors.length > 1)
+        throw new AggregateError(errors, "USX cleanup failed");
 }
 
 export function removeUI(...items: USXChildren[]) {
-    for (const item of items) {
-        if (item == null || typeof item === "string" || typeof item === "number" || typeof item === "boolean") {
-            continue;
-        }
-
-        if (item instanceof Array) {
-            removeUI(...item);
-            continue;
-        }
-
-        if (item instanceof USXComponent) {
-            if (item._rendered != null) {
-                removeUI(item._rendered);
-            }
-            continue;
-        }
-
-        if (item.parentNode) {
-            item.parentNode.removeChild(item);
-        }
-        unbind(item);
-    }
+    const errors: unknown[] = [];
+    for (const item of items)
+        removeItem(item, errors);
+    throwCleanupErrors(errors);
 }
 
-let inUpdate = false;
-export function updateUI() {
-    if (inUpdate) {
-        // ignore reentrant update
+function removeItem(item: USXChildren, errors: unknown[]) {
+    if (item == null || typeof item === "string" || typeof item === "number" || typeof item === "boolean")
+        return;
+    if (item instanceof Array) {
+        for (const child of item)
+            removeItem(child, errors);
         return;
     }
-    inUpdate = true;
+
     try {
-        bindings.forEach(binding => {
-            binding.updateCallbacks.forEach(fn => fn());
+        if (item.parentNode)
+            item.parentNode.removeChild(item);
+    } catch (error) {
+        errors.push(error);
+    }
+    collectUnbind(item, errors);
+}
+
+let inSync = false;
+export function syncUI() {
+    if (inSync) {
+        // ignore reentrant synchronization
+        return;
+    }
+    inSync = true;
+    try {
+        bindings.forEach((binding, node) => {
+            if (node.isConnected)
+                binding.syncCallbacks.forEach(fn => fn());
         })
     } finally {
-        inUpdate = false;
+        inSync = false;
     }
 }

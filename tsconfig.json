@@ -11,6 +11,8 @@
       "DOM",
       "ES2022"
     ],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
     "forceConsistentCasingInFileNames": true
   },
   "include": [

@@ -1,7 +1,6 @@
 import type { USXFunctionFactory, USXIntrinsicProps } from "./index.js";
 
-export { jsx } from "./index.js";
-export { jsx as jsxs } from "./index.js";
+export { jsx as jsxDEV } from "./index.js";
 export { Fragment } from "./index.js";
 
 export namespace JSX {

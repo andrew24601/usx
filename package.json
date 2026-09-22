@@ -1,8 +1,12 @@
 {
   "name": "usx",
-  "version": "3.0.1",
-  "description": "Reactive vanilla jsx",
+  "version": "4.0.0",
+  "description": "A small direct-DOM JSX runtime with explicit synchronization",
   "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=24.19.0"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,11 +18,16 @@
     "./jsx-runtime": {
       "types": "./dist/jsx-runtime.d.ts",
       "import": "./dist/jsx-runtime.js"
+    },
+    "./jsx-dev-runtime": {
+      "types": "./dist/jsx-dev-runtime.d.ts",
+      "import": "./dist/jsx-dev-runtime.js"
     }
   },
   "scripts": {
     "build": "tsc",
-    "test": "c8 --all --include=src/**/*.ts --reporter=html --reporter=text mocha --import=tsx test/**/*.ts"
+    "test": "c8 --all --include=src/**/*.ts --reporter=html --reporter=text node --import=tsx --test test/test.ts",
+    "typecheck": "npm run build && tsc -p tsconfig.typecheck.json && tsc -p tsconfig.typecheck.json --jsx react-jsxdev"
   },
   "repository": {
     "type": "git",
@@ -31,21 +40,14 @@
   },
   "homepage": "https://github.com/andrew24601/usx#readme",
   "devDependencies": {
-    "@types/chai": "^5.2.3",
-    "@types/mocha": "^10.0.10",
-    "c8": "^11.0.0",
-    "chai": "^6.2.2",
-    "jsdom": "^29.1.1",
-    "jsdom-global": "^3.0.2",
-    "mocha": "^11.7.6",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^24.13.3",
+    "c8": "^12.0.0",
+    "jsdom": "^30.0.1",
+    "tsx": "^4.23.12",
+    "typescript": "^7.0.2"
   },
   "files": [
     "dist"
-  ],
-  "overrides": {
-    "diff": "^9.0.0",
-    "serialize-javascript": "^7.0.6"
-  }
+  ]
 }
